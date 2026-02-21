@@ -17,8 +17,10 @@ export function ToastContainer() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white text-sm px-4 py-2 rounded-full shadow-lg animate-fade-in pointer-events-none select-none">
-      {message}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none">
+      <div className="bg-gray-800 text-white text-sm px-4 py-2 rounded-full shadow-lg animate-fade-in">
+        {message}
+      </div>
     </div>
   );
 }
