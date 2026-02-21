@@ -38,6 +38,7 @@ export const api = {
 export function streamMessage(
   chatId: string,
   content: string,
+  options: { provider: string; model: string },
   callbacks: {
     onStart?: (data: { messageId: string; userMessageId: string }) => void;
     onChunk: (text: string) => void;
@@ -50,7 +51,7 @@ export function streamMessage(
   fetch(`${BASE}/chats/${chatId}/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, provider: options.provider, model: options.model }),
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {

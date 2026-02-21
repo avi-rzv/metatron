@@ -68,7 +68,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
   // POST /api/chats/:id/stream — SSE streaming message
   fastify.post<{
     Params: { id: string };
-    Body: { content: string };
+    Body: { content: string; provider?: string; model?: string };
   }>('/api/chats/:id/stream', async (req, reply) => {
     const chat = db.select().from(chats).where(eq(chats.id, req.params.id)).get();
     if (!chat) {
@@ -81,6 +81,10 @@ export async function chatRoutes(fastify: FastifyInstance) {
       reply.status(400).send({ error: 'Content is required' });
       return;
     }
+
+    // Use provider/model from request if provided (user changed selector), else fall back to chat's stored values
+    const activeProvider = req.body.provider ?? chat.provider;
+    const activeModel = req.body.model ?? chat.model;
 
     // Save user message
     const userMsgId = nanoid();
@@ -151,7 +155,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
       reply.raw.end();
     };
 
-    if (chat.provider === 'gemini') {
+    if (activeProvider === 'gemini') {
       if (!settings.gemini.apiKey) {
         onError(new Error('Gemini API key not configured'));
         return;
@@ -164,7 +168,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
 
       streamGeminiChat({
         apiKey: settings.gemini.apiKey,
-        model: chat.model,
+        model: activeModel,
         thinkingLevel: settings.gemini.thinkingLevel,
         history: geminiHistory,
         userMessage: userContent,
@@ -186,7 +190,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
 
       streamOpenAIChat({
         apiKey: settings.openai.apiKey,
-        model: chat.model,
+        model: activeModel,
         reasoningEffort: settings.openai.reasoningEffort,
         messages: openAIMessages,
         onChunk,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faKey, faCheck, faSpinner, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
@@ -58,20 +58,50 @@ interface ApiKeyFieldProps {
   onChange: (v: string) => void;
   placeholder?: string;
   secured?: boolean;
+  maskedValue?: string;
 }
 
-function ApiKeyField({ value, onChange, placeholder, secured }: ApiKeyFieldProps) {
+function ApiKeyField({ value, onChange, placeholder, secured, maskedValue }: ApiKeyFieldProps) {
   const [show, setShow] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // When parent clears value (after save), exit editing mode
+  useEffect(() => {
+    if (!value) setIsEditing(false);
+  }, [value]);
+
+  // Showing the saved masked key (not in edit mode for new key entry)
+  const showingMasked = secured && !!maskedValue && !isEditing;
+
+  const handleMaskedClick = () => {
+    setIsEditing(true);
+    onChange('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   return (
     <div className="relative flex items-center">
       <FontAwesomeIcon icon={faKey} className="absolute left-3 text-gray-300 text-xs" />
-      <input
-        type={show ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? t.modelManager.apiKeyPlaceholder}
-        className="w-full rounded-full border border-gray-200 bg-white py-2 pl-8 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
-      />
+      {showingMasked ? (
+        <input
+          ref={inputRef}
+          type={show ? 'text' : 'password'}
+          value={show ? maskedValue : '***'}
+          readOnly
+          onClick={handleMaskedClick}
+          className="w-full cursor-pointer rounded-full border border-gray-200 bg-white py-2 pl-8 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
+        />
+      ) : (
+        <input
+          ref={inputRef}
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder ?? t.modelManager.apiKeyPlaceholder}
+          className="w-full rounded-full border border-gray-200 bg-white py-2 pl-8 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
+        />
+      )}
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
@@ -201,12 +231,12 @@ export function ModelManagerPage() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">
               {t.modelManager.apiKey}
             </p>
-            <ApiKeyField value={geminiKey} onChange={setGeminiKey} />
-            {settings?.gemini.hasApiKey && (
-              <p className="mt-1.5 text-xs text-gray-400">
-                {t.modelManager.keySecured}
-              </p>
-            )}
+            <ApiKeyField
+              value={geminiKey}
+              onChange={setGeminiKey}
+              secured={settings?.gemini.hasApiKey}
+              maskedValue={settings?.gemini.apiKey}
+            />
           </div>
 
           {/* Default Model */}
@@ -244,12 +274,12 @@ export function ModelManagerPage() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">
               {t.modelManager.apiKey}
             </p>
-            <ApiKeyField value={openaiKey} onChange={setOpenaiKey} />
-            {settings?.openai.hasApiKey && (
-              <p className="mt-1.5 text-xs text-gray-400">
-                {t.modelManager.keySecured}
-              </p>
-            )}
+            <ApiKeyField
+              value={openaiKey}
+              onChange={setOpenaiKey}
+              secured={settings?.openai.hasApiKey}
+              maskedValue={settings?.openai.apiKey}
+            />
           </div>
 
           {/* Default Model */}

@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { getSettings, updateSettings } from '../services/settings.js';
+import { getDecryptedSettings, updateSettings } from '../services/settings.js';
 import { maskApiKey } from '../services/encryption.js';
 
 export async function settingsRoutes(fastify: FastifyInstance) {
   // GET /api/settings — returns settings with masked API keys
   fastify.get('/api/settings', async (_req, reply) => {
-    const s = await getSettings();
+    const s = await getDecryptedSettings();
     return {
       gemini: {
         ...s.gemini,

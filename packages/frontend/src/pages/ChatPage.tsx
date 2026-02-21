@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -28,12 +28,23 @@ export function ChatPage() {
   const [model, setModel] = useState<string>(GEMINI_MODELS[0].id);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
 
-  // Sync provider/model from settings once loaded
+  // Only apply settings defaults once per new-chat session (not on every settings refetch)
+  const settingsInitialized = useRef(false);
+
+  // When navigating to a new chat (no chatId), allow re-initialization from settings
   useEffect(() => {
-    if (!settings) return;
-    setProvider('gemini');
-    setModel(settings.gemini.defaultModel ?? GEMINI_MODELS[0].id);
-  }, [settings]);
+    if (!chatId) settingsInitialized.current = false;
+  }, [chatId]);
+
+  // Sync provider/model from settings only on first load (or when opening a new chat)
+  useEffect(() => {
+    if (!settings || settingsInitialized.current) return;
+    if (!chatId) {
+      settingsInitialized.current = true;
+      setProvider('gemini');
+      setModel(settings.gemini.defaultModel ?? GEMINI_MODELS[0].id);
+    }
+  }, [settings, chatId]);
 
   // Load existing chat messages
   const { data: chatData } = useQuery({
@@ -88,7 +99,7 @@ export function ChatPage() {
 
     setStreaming({ isStreaming: true, streamingContent: '', streamingMessageId: null });
 
-    streamMessage(currentChatId, content, {
+    streamMessage(currentChatId, content, { provider, model }, {
       onStart: ({ messageId, userMessageId }) => {
         setStreaming({ isStreaming: true, streamingContent: '', streamingMessageId: messageId });
         // Replace temp user message id

@@ -45,6 +45,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     setValue('');
     if (textareaRef.current) {
       textareaRef.current.style.height = `${MIN_ROWS * LINE_HEIGHT}px`;
+      textareaRef.current.focus();
     }
   };
 
