@@ -65,9 +65,10 @@ export function SidePanel() {
               to={to}
               className={({ isActive }) =>
                 [
-                  'flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-all duration-150',
-                  'hover:bg-gray-100 active:scale-[0.97]',
-                  isActive ? 'bg-black text-white hover:bg-black' : 'text-gray-700',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-all duration-150 active:scale-[0.97]',
+                  isActive
+                    ? 'bg-black text-white hover:bg-black/90'
+                    : 'text-gray-700 hover:bg-gray-100',
                   collapsed ? 'justify-center' : '',
                 ].join(' ')
               }

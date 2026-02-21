@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from '@/components/layout/Layout';
 import { ChatPage } from '@/pages/ChatPage';
 import { ModelManagerPage } from '@/pages/ModelManagerPage';
+import { ToastContainer } from '@/components/ui/ToastContainer';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/models" element={<ModelManagerPage />} />
           </Route>
         </Routes>
+        <ToastContainer />
       </BrowserRouter>
     </QueryClientProvider>
   );
