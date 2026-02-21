@@ -1,3 +1,5 @@
+import './env.js'; // Must be first — loads .env into process.env before anything else
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import staticPlugin from '@fastify/static';
@@ -7,7 +9,9 @@ import { chatRoutes } from './routes/chats.js';
 import { settingsRoutes } from './routes/settings.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const isDev = process.env.NODE_ENV !== 'production';
+
+// Treat as dev only when explicitly set — undefined means production on the server
+const isDev = process.env.NODE_ENV === 'development';
 
 const fastify = Fastify({
   logger: isDev
