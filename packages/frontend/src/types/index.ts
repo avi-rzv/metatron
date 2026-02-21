@@ -17,16 +17,16 @@ export interface Chat {
 }
 
 export interface GeminiSettings {
-  apiKey: string;
-  hasApiKey: boolean;
+  apiKey?: string;
+  hasApiKey?: boolean;
   defaultModel: string;
   thinkingLevel: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
   imageModel: string;
 }
 
 export interface OpenAISettings {
-  apiKey: string;
-  hasApiKey: boolean;
+  apiKey?: string;
+  hasApiKey?: boolean;
   defaultModel: string;
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high';
   imageModel: string;
