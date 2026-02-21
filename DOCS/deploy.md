@@ -216,7 +216,7 @@ Paste the following, replacing placeholder values:
 PORT=4000
 HOST=127.0.0.1
 DATABASE_URL=./data/metatron.db
-ENCRYPTION_SECRET=replace-this-with-a-long-random-secret-64-chars-minimum
+ENCRYPTION_SECRET=a18a8fe2a0692752d5ee76f906070bee21be593ea1d6d0de2574c5a6b6578a170441fedeec82a9cfa59193d63fb11e7c
 FRONTEND_ORIGIN=https://76.13.147.50
 NODE_ENV=production
 ```
@@ -245,9 +245,11 @@ This runs:
 
 ---
 
-### Step 13 — Run Database Migrations
+### Step 13 — Initialize the Database
 
-Initialize the SQLite database and run all schema migrations:
+> **First-time setup note:** `db:migrate` requires pre-generated migration files committed to the repo (`packages/backend/drizzle/`). If those files are not yet in git, use `db:push` instead — it applies the schema directly to a fresh database without needing them.
+
+**Option A — migration files exist in git (standard, use this going forward):**
 
 ```bash
 cd /home/metatron/apps/metatron/packages/backend
@@ -255,7 +257,26 @@ npm run db:migrate
 cd /home/metatron/apps/metatron
 ```
 
-This creates the `data/metatron.db` file with all required tables.
+**Option B — migration files are missing (first deploy workaround):**
+
+```bash
+cd /home/metatron/apps/metatron/packages/backend
+npm run db:push
+cd /home/metatron/apps/metatron
+```
+
+Either command creates the `data/metatron.db` file with all required tables.
+
+> **After using Option B**, generate and commit the migration files from your local machine so future deploys can use `db:migrate`:
+> ```bash
+> # On your local machine:
+> cd packages/backend
+> npm run db:generate
+> cd ../..
+> git add packages/backend/drizzle/
+> git commit -m "chore: add initial drizzle migration files"
+> git push origin master
+> ```
 
 ---
 
@@ -265,7 +286,7 @@ Launch the backend and configure PM2 to manage it:
 
 ```bash
 cd /home/metatron/apps/metatron
-pm2 start packages/backend/dist/index.js --name metatron --cwd packages/backend
+pm2 start /home/metatron/apps/metatron/packages/backend/dist/index.js --name metatron
 ```
 
 Save the PM2 process list so it survives reboots:
