@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply font-sans antialiased text-black bg-white;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-200 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-300;
+  }
+}
+
+@layer utilities {
+  .prose-sm {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .prose p {
+    @apply my-1.5;
+  }
+
+  .prose ul {
+    @apply list-disc pl-5 my-2 space-y-0.5;
+  }
+
+  .prose ol {
+    @apply list-decimal pl-5 my-2 space-y-0.5;
+  }
+
+  .prose h1, .prose h2, .prose h3 {
+    @apply font-semibold;
+  }
+
+  .prose h1 { @apply text-xl mt-4 mb-2; }
+  .prose h2 { @apply text-lg mt-3 mb-1.5; }
+  .prose h3 { @apply text-base mt-2 mb-1; }
+
+  .prose strong { @apply font-semibold; }
+  .prose em { @apply italic; }
+
+  .prose table {
+    @apply w-full text-sm border-collapse my-3;
+  }
+  .prose th, .prose td {
+    @apply border border-gray-200 px-3 py-1.5 text-left;
+  }
+  .prose th {
+    @apply bg-gray-50 font-semibold;
+  }
+
+  .prose hr {
+    @apply border-gray-200 my-4;
+  }
+}

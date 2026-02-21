@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+packages/frontend/dist/
+packages/backend/dist/
+
+# Environment & secrets
+.env
+.env.local
+.env.production
+.env.*.local
+credentials.txt
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Claude Code local config
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
