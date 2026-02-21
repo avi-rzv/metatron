@@ -53,9 +53,18 @@ export function ChatPage() {
     enabled: !!chatId,
   });
 
+  // Track whether we've already initialized model from this chat — prevents
+  // the chatData refetch after each message from resetting user's model selection.
+  const chatModelInitialized = useRef(false);
   useEffect(() => {
-    if (chatData?.messages) {
-      setLocalMessages(chatData.messages);
+    chatModelInitialized.current = false;
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!chatData?.messages) return;
+    setLocalMessages(chatData.messages);
+    if (!chatModelInitialized.current) {
+      chatModelInitialized.current = true;
       if (chatData.provider) setProvider(chatData.provider as Provider);
       if (chatData.model) setModel(chatData.model);
     }

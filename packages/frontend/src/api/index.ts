@@ -31,6 +31,7 @@ export const api = {
     get: () => request<AppSettings>('/settings'),
     update: (data: Partial<AppSettings>) =>
       request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    revealKeys: () => request<{ gemini: string; openai: string }>('/settings/keys'),
   },
 };
 

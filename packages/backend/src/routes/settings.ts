@@ -20,6 +20,15 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     };
   });
 
+  // GET /api/settings/keys — returns full decrypted API keys for display
+  fastify.get('/api/settings/keys', async (_req, reply) => {
+    const s = await getDecryptedSettings();
+    return {
+      gemini: s.gemini.apiKey,
+      openai: s.openai.apiKey,
+    };
+  });
+
   // PUT /api/settings — update settings
   fastify.put<{ Body: { gemini?: Record<string, string>; openai?: Record<string, string> } }>(
     '/api/settings',

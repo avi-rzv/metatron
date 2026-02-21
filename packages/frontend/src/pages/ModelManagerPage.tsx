@@ -59,25 +59,38 @@ interface ApiKeyFieldProps {
   placeholder?: string;
   secured?: boolean;
   maskedValue?: string;
+  revealedValue?: string;
+  onReveal?: () => void;
 }
 
-function ApiKeyField({ value, onChange, placeholder, secured, maskedValue }: ApiKeyFieldProps) {
+function ApiKeyField({ value, onChange, placeholder, secured, maskedValue, revealedValue, onReveal }: ApiKeyFieldProps) {
   const [show, setShow] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // When parent clears value (after save), exit editing mode
+  // When parent clears value (after save), exit editing mode and hide key
   useEffect(() => {
-    if (!value) setIsEditing(false);
+    if (!value) {
+      setIsEditing(false);
+      setShow(false);
+    }
   }, [value]);
 
-  // Showing the saved masked key (not in edit mode for new key entry)
+  // Showing the saved key display (not in edit mode for new key entry)
   const showingMasked = secured && !!maskedValue && !isEditing;
 
   const handleMaskedClick = () => {
     setIsEditing(true);
+    setShow(false);
     onChange('');
     setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleToggleShow = () => {
+    if (!show && onReveal) {
+      onReveal(); // fetch full key on first reveal
+    }
+    setShow((s) => !s);
   };
 
   return (
@@ -86,8 +99,8 @@ function ApiKeyField({ value, onChange, placeholder, secured, maskedValue }: Api
       {showingMasked ? (
         <input
           ref={inputRef}
-          type={show ? 'text' : 'password'}
-          value={show ? maskedValue : '***'}
+          type="text"
+          value={show ? (revealedValue ?? maskedValue ?? '') : '***'}
           readOnly
           onClick={handleMaskedClick}
           className="w-full cursor-pointer rounded-full border border-gray-200 bg-white py-2 pl-8 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
@@ -104,7 +117,7 @@ function ApiKeyField({ value, onChange, placeholder, secured, maskedValue }: Api
       )}
       <button
         type="button"
-        onClick={() => setShow((s) => !s)}
+        onClick={handleToggleShow}
         className="absolute right-3 text-gray-400 hover:text-gray-700 transition-colors duration-150"
         aria-label={show ? 'Hide key' : 'Show key'}
       >
@@ -155,6 +168,14 @@ export function ModelManagerPage() {
   }, [settings]);
 
   const [savedSection, setSavedSection] = useState<string | null>(null);
+  const [revealedKeys, setRevealedKeys] = useState<{ gemini: string; openai: string } | null>(null);
+
+  const handleReveal = async () => {
+    if (!revealedKeys) {
+      const keys = await api.settings.revealKeys();
+      setRevealedKeys(keys);
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: api.settings.update,
@@ -174,6 +195,7 @@ export function ModelManagerPage() {
     });
     setSavedSection('gemini');
     setGeminiKey('');
+    setRevealedKeys(null);
     setTimeout(() => setSavedSection(null), 2000);
   };
 
@@ -188,6 +210,7 @@ export function ModelManagerPage() {
     });
     setSavedSection('openai');
     setOpenaiKey('');
+    setRevealedKeys(null);
     setTimeout(() => setSavedSection(null), 2000);
   };
 
@@ -236,6 +259,8 @@ export function ModelManagerPage() {
               onChange={setGeminiKey}
               secured={settings?.gemini.hasApiKey}
               maskedValue={settings?.gemini.apiKey}
+              revealedValue={revealedKeys?.gemini}
+              onReveal={handleReveal}
             />
           </div>
 
@@ -279,6 +304,8 @@ export function ModelManagerPage() {
               onChange={setOpenaiKey}
               secured={settings?.openai.hasApiKey}
               maskedValue={settings?.openai.apiKey}
+              revealedValue={revealedKeys?.openai}
+              onReveal={handleReveal}
             />
           </div>
 

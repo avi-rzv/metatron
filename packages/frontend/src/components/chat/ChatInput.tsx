@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faPaperPlane } from '@fortawesome/free-solid-svg-icons';
 import { t } from '@/i18n';
@@ -38,6 +38,13 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
   };
 
+  // Refocus textarea when streaming ends (disabled goes false)
+  useEffect(() => {
+    if (!disabled) {
+      textareaRef.current?.focus();
+    }
+  }, [disabled]);
+
   const handleSend = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
@@ -45,7 +52,6 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     setValue('');
     if (textareaRef.current) {
       textareaRef.current.style.height = `${MIN_ROWS * LINE_HEIGHT}px`;
-      textareaRef.current.focus();
     }
   };
 
