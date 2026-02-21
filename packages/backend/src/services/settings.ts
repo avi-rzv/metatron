@@ -62,18 +62,26 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function updateSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
+
+  // Only overwrite the API key if a new non-empty key is provided.
+  // Sending an empty apiKey means "don't change the existing key".
+  const geminiPartial = { ...partial.gemini };
+  const openaiPartial = { ...partial.openai };
+  if (!geminiPartial.apiKey) delete geminiPartial.apiKey;
+  if (!openaiPartial.apiKey) delete openaiPartial.apiKey;
+
   const updated: AppSettings = {
-    gemini: { ...current.gemini, ...(partial.gemini ?? {}) },
-    openai: { ...current.openai, ...(partial.openai ?? {}) },
+    gemini: { ...current.gemini, ...geminiPartial },
+    openai: { ...current.openai, ...openaiPartial },
   };
 
-  // Encrypt API keys before storing
+  // Encrypt only newly provided keys; preserved keys are already encrypted in `current`.
   const toStore = structuredClone(updated);
-  if (toStore.gemini.apiKey) {
-    toStore.gemini.apiKey = encrypt(toStore.gemini.apiKey);
+  if (partial.gemini?.apiKey) {
+    toStore.gemini.apiKey = encrypt(partial.gemini.apiKey);
   }
-  if (toStore.openai.apiKey) {
-    toStore.openai.apiKey = encrypt(toStore.openai.apiKey);
+  if (partial.openai?.apiKey) {
+    toStore.openai.apiKey = encrypt(partial.openai.apiKey);
   }
 
   await setSetting('app_settings', JSON.stringify(toStore));

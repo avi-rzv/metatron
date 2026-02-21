@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faKey, faCheck, faSpinner, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
@@ -104,13 +104,25 @@ export function ModelManagerPage() {
   const [geminiKey, setGeminiKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
 
-  const [geminiModel, setGeminiModel] = useState(settings?.gemini.defaultModel ?? 'gemini-3-pro-preview');
-  const [geminiThinking, setGeminiThinking] = useState<ThinkingLevel>(settings?.gemini.thinkingLevel ?? 'MEDIUM');
-  const [geminiImage, setGeminiImage] = useState(settings?.gemini.imageModel ?? 'gemini-3-pro-image-preview');
+  const [geminiModel, setGeminiModel] = useState('gemini-3-pro-preview');
+  const [geminiThinking, setGeminiThinking] = useState<ThinkingLevel>('MEDIUM');
+  const [geminiImage, setGeminiImage] = useState('gemini-3-pro-image-preview');
 
-  const [openaiModel, setOpenaiModel] = useState(settings?.openai.defaultModel ?? 'gpt-5.2');
-  const [openaiReasoning, setOpenaiReasoning] = useState<ReasoningEffort>(settings?.openai.reasoningEffort ?? 'medium');
-  const [openaiImage, setOpenaiImage] = useState(settings?.openai.imageModel ?? 'gpt-image-1');
+  const [openaiModel, setOpenaiModel] = useState('gpt-5.2');
+  const [openaiReasoning, setOpenaiReasoning] = useState<ReasoningEffort>('medium');
+  const [openaiImage, setOpenaiImage] = useState('gpt-image-1');
+
+  // Sync local state from loaded settings (useState initial value is ignored after first render)
+  useEffect(() => {
+    if (settings) {
+      setGeminiModel(settings.gemini.defaultModel);
+      setGeminiThinking(settings.gemini.thinkingLevel);
+      setGeminiImage(settings.gemini.imageModel);
+      setOpenaiModel(settings.openai.defaultModel);
+      setOpenaiReasoning(settings.openai.reasoningEffort);
+      setOpenaiImage(settings.openai.imageModel);
+    }
+  }, [settings]);
 
   const [savedSection, setSavedSection] = useState<string | null>(null);
 
@@ -124,11 +136,10 @@ export function ModelManagerPage() {
   const saveGemini = async () => {
     await saveMutation.mutateAsync({
       gemini: {
-        apiKey: geminiKey || '',
+        ...(geminiKey ? { apiKey: geminiKey } : {}),
         defaultModel: geminiModel,
         thinkingLevel: geminiThinking,
         imageModel: geminiImage,
-        hasApiKey: false,
       },
     });
     setSavedSection('gemini');
@@ -139,11 +150,10 @@ export function ModelManagerPage() {
   const saveOpenAI = async () => {
     await saveMutation.mutateAsync({
       openai: {
-        apiKey: openaiKey || '',
+        ...(openaiKey ? { apiKey: openaiKey } : {}),
         defaultModel: openaiModel,
         reasoningEffort: openaiReasoning,
         imageModel: openaiImage,
-        hasApiKey: false,
       },
     });
     setSavedSection('openai');
