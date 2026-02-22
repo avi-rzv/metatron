@@ -1,4 +1,4 @@
-import type { Chat, AppSettings, Message, SystemInstruction } from '../types';
+import type { Chat, AppSettings, Message, SystemInstruction, Citation, Media, Attachment } from '../types';
 
 const BASE = '/api';
 
@@ -31,7 +31,32 @@ export const api = {
     get: () => request<AppSettings>('/settings'),
     update: (data: Partial<AppSettings>) =>
       request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
-    revealKeys: () => request<{ gemini: string; openai: string }>('/settings/keys'),
+    revealKeys: () => request<{ gemini: string; openai: string; braveSearch: string }>('/settings/keys'),
+  },
+
+  media: {
+    list: (limit?: number) =>
+      request<Media[]>(`/media${limit ? `?limit=${limit}` : ''}`),
+    delete: (id: string) =>
+      fetch(`${BASE}/media/${id}`, { method: 'DELETE' }),
+  },
+
+  uploads: {
+    delete: (id: string) =>
+      fetch(`${BASE}/uploads/${id}`, { method: 'DELETE' }),
+  },
+
+  voice: {
+    transcribe: async (audioBlob: Blob): Promise<{ transcription: string; filename: string; mimeType: string; size: number }> => {
+      const form = new FormData();
+      form.append('file', audioBlob, 'voice.webm');
+      const res = await fetch(`${BASE}/voice/transcribe`, { method: 'POST', body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error((err as { error: string }).error ?? res.statusText);
+      }
+      return res.json();
+    },
   },
 
   systemInstruction: {
@@ -46,15 +71,29 @@ export const api = {
   },
 };
 
+export function getMediaUrl(mediaId: string): string {
+  return `${BASE}/media/${mediaId}/file`;
+}
+
+export function getUploadUrl(attachmentId: string): string {
+  return `${BASE}/uploads/${attachmentId}/file`;
+}
+
 // SSE streaming
 export function streamMessage(
   chatId: string,
   content: string,
-  options: { provider: string; model: string },
+  options: {
+    provider: string;
+    model: string;
+    attachments?: Array<{ name: string; mimeType: string; data: string }>;
+    audio?: { filename: string; mimeType: string; size: number };
+  },
   callbacks: {
     onStart?: (data: { messageId: string; userMessageId: string }) => void;
     onChunk: (text: string) => void;
-    onDone?: (data: { messageId: string }) => void;
+    onImage?: (data: { mediaId: string; filename: string; prompt: string; model: string }) => void;
+    onDone?: (data: { messageId: string; citations?: Citation[]; mediaIds?: string[] }) => void;
     onError?: (message: string) => void;
   }
 ): AbortController {
@@ -63,7 +102,13 @@ export function streamMessage(
   fetch(`${BASE}/chats/${chatId}/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, provider: options.provider, model: options.model }),
+    body: JSON.stringify({
+      content,
+      provider: options.provider,
+      model: options.model,
+      attachments: options.attachments,
+      audio: options.audio,
+    }),
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
@@ -93,6 +138,7 @@ export function streamMessage(
           const data = JSON.parse(line.slice(6));
           if (eventType === 'start') callbacks.onStart?.(data);
           else if (eventType === 'chunk') callbacks.onChunk(data.text);
+          else if (eventType === 'image') callbacks.onImage?.(data);
           else if (eventType === 'done') callbacks.onDone?.(data);
           else if (eventType === 'error') callbacks.onError?.(data.message);
           eventType = '';

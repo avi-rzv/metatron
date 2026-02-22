@@ -8,6 +8,10 @@ import { dirname, join } from 'path';
 import { chatRoutes } from './routes/chats.js';
 import { settingsRoutes } from './routes/settings.js';
 import { systemInstructionRoutes } from './routes/systemInstruction.js';
+import { mediaRoutes } from './routes/media.js';
+import { uploadRoutes } from './routes/uploads.js';
+import { voiceRoutes } from './routes/voice.js';
+import multipart from '@fastify/multipart';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +22,7 @@ const fastify = Fastify({
   logger: isDev
     ? { level: 'info' }
     : true,
+  bodyLimit: 52_428_800, // 50 MB for base64 file uploads
 });
 
 await fastify.register(cors, {
@@ -25,10 +30,17 @@ await fastify.register(cors, {
   credentials: true,
 });
 
+await fastify.register(multipart, {
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+});
+
 // Routes
 await fastify.register(chatRoutes);
 await fastify.register(settingsRoutes);
 await fastify.register(systemInstructionRoutes);
+await fastify.register(mediaRoutes);
+await fastify.register(uploadRoutes);
+await fastify.register(voiceRoutes);
 
 // Health check
 fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
