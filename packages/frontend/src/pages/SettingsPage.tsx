@@ -27,12 +27,12 @@ function getUTCOffset(tz: string): string {
 
 // Build options list: detected timezone first, then all others
 const buildTimezoneOptions = () => {
-  const allTzs = Intl.supportedValuesOf('timeZone');
-  const withOffsets = allTzs.map(tz => ({
+  const allTzs = (Intl as any).supportedValuesOf('timeZone') as string[];
+  const withOffsets = allTzs.map((tz: string) => ({
     value: tz,
     label: `${tz} (${getUTCOffset(tz)})`,
   }));
-  const userIdx = withOffsets.findIndex(t => t.value === USER_TIMEZONE);
+  const userIdx = withOffsets.findIndex((t: { value: string }) => t.value === USER_TIMEZONE);
   if (userIdx > 0) {
     const [userTz] = withOffsets.splice(userIdx, 1);
     withOffsets.unshift(userTz);
@@ -60,7 +60,7 @@ export function SettingsPage() {
     if (settings?.timezone) {
       const tz = settings.timezone;
       setTimezone(tz);
-      const option = ALL_TIMEZONE_OPTIONS.find(o => o.value === tz);
+      const option = ALL_TIMEZONE_OPTIONS.find((o: { value: string }) => o.value === tz);
       setInputValue(option?.label ?? tz);
     }
   }, [settings]);
@@ -82,7 +82,7 @@ export function SettingsPage() {
     const val = e.target.value;
     setInputValue(val);
     const lower = val.toLowerCase();
-    setFiltered(ALL_TIMEZONE_OPTIONS.filter(o => o.label.toLowerCase().includes(lower)));
+    setFiltered(ALL_TIMEZONE_OPTIONS.filter((o: { label: string }) => o.label.toLowerCase().includes(lower)));
     setIsOpen(true);
   };
 
@@ -96,7 +96,7 @@ export function SettingsPage() {
     // Delay to allow mousedown on option to fire first
     setTimeout(() => {
       setIsOpen(false);
-      const current = ALL_TIMEZONE_OPTIONS.find(o => o.value === timezone);
+      const current = ALL_TIMEZONE_OPTIONS.find((o: { value: string }) => o.value === timezone);
       setInputValue(current?.label ?? timezone);
     }, 150);
   };
@@ -133,7 +133,7 @@ export function SettingsPage() {
                 value={inputValue}
                 onChange={handleInputChange}
                 onFocus={() => {
-                  setFiltered(ALL_TIMEZONE_OPTIONS.filter(o =>
+                  setFiltered(ALL_TIMEZONE_OPTIONS.filter((o: { label: string }) =>
                     o.label.toLowerCase().includes(inputValue.toLowerCase())
                   ));
                   setIsOpen(true);
@@ -144,7 +144,7 @@ export function SettingsPage() {
               />
               {isOpen && filtered.length > 0 && (
                 <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-md text-sm">
-                  {filtered.slice(0, 50).map((option) => (
+                  {filtered.slice(0, 50).map((option: { value: string; label: string }) => (
                     <li
                       key={option.value}
                       onMouseDown={() => handleSelect(option)}
