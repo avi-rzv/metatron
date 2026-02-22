@@ -16,6 +16,7 @@ export function useVoiceRecorder() {
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resolveRef = useRef<((blob: Blob | null) => void) | null>(null);
+  const startedAtRef = useRef<number>(0);
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -58,6 +59,7 @@ export function useVoiceRecorder() {
     };
 
     recorder.start();
+    startedAtRef.current = Date.now();
     setIsRecording(true);
     setDuration(0);
     timerRef.current = setInterval(() => {
@@ -89,5 +91,9 @@ export function useVoiceRecorder() {
     resolveRef.current = null;
   }, [cleanup]);
 
-  return { isRecording, duration, startRecording, stopRecording, cancelRecording };
+  const getElapsedMs = useCallback(() => {
+    return startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+  }, []);
+
+  return { isRecording, duration, startRecording, stopRecording, cancelRecording, getElapsedMs };
 }

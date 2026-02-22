@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { Chat, Message } from '../types';
+import type { Chat, Message, Citation, Media } from '../types';
+
+interface StreamingMedia {
+  mediaId: string;
+  filename: string;
+  prompt: string;
+  model: string;
+}
 
 interface StreamingState {
   isStreaming: boolean;
@@ -9,9 +16,13 @@ interface StreamingState {
 
 interface ChatState extends StreamingState {
   activeChatId: string | null;
+  streamingCitations: Citation[];
+  streamingMedia: StreamingMedia[];
   setActiveChatId: (id: string | null) => void;
   setStreaming: (s: StreamingState) => void;
   appendStreamChunk: (text: string) => void;
+  setStreamingCitations: (citations: Citation[]) => void;
+  addStreamingMedia: (media: StreamingMedia) => void;
   stopStreaming: () => void;
 }
 
@@ -20,6 +31,8 @@ export const useChatStore = create<ChatState>((set) => ({
   isStreaming: false,
   streamingContent: '',
   streamingMessageId: null,
+  streamingCitations: [],
+  streamingMedia: [],
 
   setActiveChatId: (id) => set({ activeChatId: id }),
 
@@ -28,6 +41,17 @@ export const useChatStore = create<ChatState>((set) => ({
   appendStreamChunk: (text) =>
     set((state) => ({ streamingContent: state.streamingContent + text })),
 
+  setStreamingCitations: (citations) => set({ streamingCitations: citations }),
+
+  addStreamingMedia: (media) =>
+    set((state) => ({ streamingMedia: [...state.streamingMedia, media] })),
+
   stopStreaming: () =>
-    set({ isStreaming: false, streamingContent: '', streamingMessageId: null }),
+    set({
+      isStreaming: false,
+      streamingContent: '',
+      streamingMessageId: null,
+      streamingCitations: [],
+      streamingMedia: [],
+    }),
 }));

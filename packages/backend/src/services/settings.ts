@@ -3,39 +3,102 @@ import { settings } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { encrypt, decrypt } from './encryption.js';
 
-export interface GeminiSettings {
+export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+
+export interface ModelWithThinking {
+  modelId: string;
+  thinkingLevel: ThinkingLevel;
+}
+
+export interface ProviderKeys {
+  apiKey: string;
+}
+
+export interface ToolSettings {
+  braveSearch: { enabled: boolean; apiKey: string };
+}
+
+export interface AppSettings {
+  primaryModel: ModelWithThinking;
+  fallbackModels: ModelWithThinking[];
+  primaryImageModel: string;
+  fallbackImageModels: string[];
+  apiKeys: {
+    gemini: ProviderKeys;
+    openai: ProviderKeys;
+  };
+  timezone: string;
+  tools: ToolSettings;
+}
+
+const DEFAULTS: AppSettings = {
+  primaryModel: { modelId: 'gemini-3.1-pro-preview', thinkingLevel: 'medium' },
+  fallbackModels: [],
+  primaryImageModel: 'gemini-3-pro-image-preview',
+  fallbackImageModels: [],
+  apiKeys: { gemini: { apiKey: '' }, openai: { apiKey: '' } },
+  timezone: 'UTC',
+  tools: { braveSearch: { enabled: false, apiKey: '' } },
+};
+
+// Old format types for migration detection
+interface OldGeminiSettings {
   apiKey: string;
   defaultModel: string;
   thinkingLevel: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
   imageModel: string;
 }
 
-export interface OpenAISettings {
+interface OldOpenAISettings {
   apiKey: string;
   defaultModel: string;
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high';
   imageModel: string;
 }
 
-export interface AppSettings {
-  gemini: GeminiSettings;
-  openai: OpenAISettings;
+interface OldAppSettings {
+  gemini: OldGeminiSettings;
+  openai: OldOpenAISettings;
+  timezone: string;
 }
 
-const DEFAULTS: AppSettings = {
-  gemini: {
-    apiKey: '',
-    defaultModel: 'gemini-3-pro-preview',
-    thinkingLevel: 'MEDIUM',
-    imageModel: 'gemini-3-pro-image-preview',
-  },
-  openai: {
-    apiKey: '',
-    defaultModel: 'gpt-5.2',
-    reasoningEffort: 'medium',
-    imageModel: 'gpt-image-1',
-  },
-};
+function isOldFormat(parsed: any): parsed is OldAppSettings {
+  return parsed.gemini?.defaultModel !== undefined && parsed.primaryModel === undefined;
+}
+
+function migrateOldToNew(old: OldAppSettings): AppSettings {
+  const fallbackModels: ModelWithThinking[] = [];
+  const fallbackImageModels: string[] = [];
+
+  // OpenAI model becomes first fallback if it exists
+  if (old.openai.defaultModel) {
+    fallbackModels.push({
+      modelId: old.openai.defaultModel,
+      thinkingLevel: old.openai.reasoningEffort ?? 'medium',
+    });
+  }
+
+  // OpenAI image model becomes fallback
+  if (old.openai.imageModel) {
+    fallbackImageModels.push(old.openai.imageModel);
+  }
+
+  return {
+    primaryModel: {
+      modelId: old.gemini.defaultModel,
+      thinkingLevel: (old.gemini.thinkingLevel?.toLowerCase() ?? 'medium') as ThinkingLevel,
+    },
+    fallbackModels,
+    primaryImageModel: old.gemini.imageModel || 'gemini-3-pro-image-preview',
+    fallbackImageModels,
+    apiKeys: {
+      gemini: { apiKey: old.gemini.apiKey || '' },
+      openai: { apiKey: old.openai.apiKey || '' },
+    },
+    timezone: old.timezone || 'UTC',
+    tools: { braveSearch: { enabled: false, apiKey: '' } },
+  };
+}
 
 async function getSetting(key: string): Promise<string | null> {
   const row = db.select().from(settings).where(eq(settings.key, key)).get();
@@ -54,7 +117,22 @@ export async function getSettings(): Promise<AppSettings> {
   if (!raw) return structuredClone(DEFAULTS);
 
   try {
-    return JSON.parse(raw) as AppSettings;
+    const parsed = JSON.parse(raw);
+    if (isOldFormat(parsed)) {
+      // Migrate and persist
+      const migrated = migrateOldToNew(parsed);
+      // Preserve encrypted API keys as-is during migration
+      const toStore = structuredClone(migrated);
+      toStore.apiKeys.gemini.apiKey = parsed.gemini.apiKey || '';
+      toStore.apiKeys.openai.apiKey = parsed.openai.apiKey || '';
+      await setSetting('app_settings', JSON.stringify(toStore));
+      return toStore;
+    }
+    const result = parsed as AppSettings;
+    if (!result.tools) {
+      result.tools = structuredClone(DEFAULTS.tools);
+    }
+    return result;
   } catch {
     return structuredClone(DEFAULTS);
   }
@@ -63,25 +141,44 @@ export async function getSettings(): Promise<AppSettings> {
 export async function updateSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
 
-  // Only overwrite the API key if a new non-empty key is provided.
-  // Sending an empty apiKey means "don't change the existing key".
-  const geminiPartial = { ...partial.gemini };
-  const openaiPartial = { ...partial.openai };
-  if (!geminiPartial.apiKey) delete geminiPartial.apiKey;
-  if (!openaiPartial.apiKey) delete openaiPartial.apiKey;
+  const currentTools = current.tools ?? DEFAULTS.tools;
 
   const updated: AppSettings = {
-    gemini: { ...current.gemini, ...geminiPartial },
-    openai: { ...current.openai, ...openaiPartial },
+    primaryModel: partial.primaryModel ?? current.primaryModel,
+    fallbackModels: partial.fallbackModels ?? current.fallbackModels,
+    primaryImageModel: partial.primaryImageModel ?? current.primaryImageModel,
+    fallbackImageModels: partial.fallbackImageModels ?? current.fallbackImageModels,
+    apiKeys: {
+      gemini: { apiKey: current.apiKeys.gemini.apiKey },
+      openai: { apiKey: current.apiKeys.openai.apiKey },
+    },
+    timezone: partial.timezone ?? current.timezone,
+    tools: {
+      braveSearch: {
+        enabled: partial.tools?.braveSearch?.enabled ?? currentTools.braveSearch.enabled,
+        apiKey: currentTools.braveSearch.apiKey,
+      },
+    },
   };
 
   // Encrypt only newly provided keys; preserved keys are already encrypted in `current`.
   const toStore = structuredClone(updated);
-  if (partial.gemini?.apiKey) {
-    toStore.gemini.apiKey = encrypt(partial.gemini.apiKey);
+  if (partial.apiKeys?.gemini?.apiKey) {
+    toStore.apiKeys.gemini.apiKey = encrypt(partial.apiKeys.gemini.apiKey);
   }
-  if (partial.openai?.apiKey) {
-    toStore.openai.apiKey = encrypt(partial.openai.apiKey);
+  if (partial.apiKeys?.openai?.apiKey) {
+    toStore.apiKeys.openai.apiKey = encrypt(partial.apiKeys.openai.apiKey);
+  }
+
+  // Brave Search API key: encrypt new key, preserve existing, or clear
+  const newBraveKey = partial.tools?.braveSearch?.apiKey;
+  if (newBraveKey !== undefined) {
+    if (newBraveKey) {
+      toStore.tools.braveSearch.apiKey = encrypt(newBraveKey);
+    } else {
+      // Empty string = remove key
+      toStore.tools.braveSearch.apiKey = '';
+    }
   }
 
   await setSetting('app_settings', JSON.stringify(toStore));
@@ -93,16 +190,43 @@ export async function getDecryptedSettings(): Promise<AppSettings> {
   if (!raw) return structuredClone(DEFAULTS);
 
   try {
-    const parsed = JSON.parse(raw) as AppSettings;
-    // Decrypt API keys
-    if (parsed.gemini.apiKey) {
-      try { parsed.gemini.apiKey = decrypt(parsed.gemini.apiKey); } catch { parsed.gemini.apiKey = ''; }
+    let parsed = JSON.parse(raw);
+    // Handle old format transparently
+    if (isOldFormat(parsed)) {
+      const migrated = migrateOldToNew(parsed);
+      // Decrypt keys from old positions
+      if (parsed.gemini.apiKey) {
+        try { migrated.apiKeys.gemini.apiKey = decrypt(parsed.gemini.apiKey); } catch { migrated.apiKeys.gemini.apiKey = ''; }
+      }
+      if (parsed.openai.apiKey) {
+        try { migrated.apiKeys.openai.apiKey = decrypt(parsed.openai.apiKey); } catch { migrated.apiKeys.openai.apiKey = ''; }
+      }
+      return migrated;
     }
-    if (parsed.openai.apiKey) {
-      try { parsed.openai.apiKey = decrypt(parsed.openai.apiKey); } catch { parsed.openai.apiKey = ''; }
+
+    parsed = parsed as AppSettings;
+    // Ensure tools defaults exist for older stored settings
+    if (!parsed.tools) {
+      parsed.tools = structuredClone(DEFAULTS.tools);
+    }
+    // Decrypt API keys
+    if (parsed.apiKeys?.gemini?.apiKey) {
+      try { parsed.apiKeys.gemini.apiKey = decrypt(parsed.apiKeys.gemini.apiKey); } catch { parsed.apiKeys.gemini.apiKey = ''; }
+    }
+    if (parsed.apiKeys?.openai?.apiKey) {
+      try { parsed.apiKeys.openai.apiKey = decrypt(parsed.apiKeys.openai.apiKey); } catch { parsed.apiKeys.openai.apiKey = ''; }
+    }
+    if (parsed.tools?.braveSearch?.apiKey) {
+      try { parsed.tools.braveSearch.apiKey = decrypt(parsed.tools.braveSearch.apiKey); } catch { parsed.tools.braveSearch.apiKey = ''; }
     }
     return parsed;
   } catch {
     return structuredClone(DEFAULTS);
   }
+}
+
+export function getThinkingLevelForModel(settings: AppSettings, modelId: string): string {
+  if (settings.primaryModel.modelId === modelId) return settings.primaryModel.thinkingLevel;
+  const fb = settings.fallbackModels.find(f => f.modelId === modelId);
+  return fb?.thinkingLevel ?? settings.primaryModel.thinkingLevel;
 }

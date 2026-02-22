@@ -1,6 +1,7 @@
 import { db } from '../db/index.js';
 import { settings } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { getSettings } from './settings.js';
 
 export interface SystemInstruction {
   coreInstruction: string;
@@ -101,11 +102,25 @@ export async function getDbSchema(): Promise<string> {
 }
 
 export async function buildCombinedPrompt(): Promise<string | null> {
-  const si = await getSystemInstruction();
+  const [si, appSettings] = await Promise.all([getSystemInstruction(), getSettings()]);
 
   if (!si.coreInstruction.trim()) {
     return null;
   }
+
+  const timezone = appSettings.timezone || 'UTC';
+  const now = new Date();
+  const dateTimeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'long',
+  }).format(now);
 
   const memorySection = si.memory.trim()
     ? si.memory
@@ -115,13 +130,33 @@ export async function buildCombinedPrompt(): Promise<string | null> {
     ? si.dbSchema
     : 'No custom tables created yet. You can create tables with the ai_ prefix using the db_query tool.';
 
+  // Check which tools are available
+  const braveEnabled = !!appSettings.tools?.braveSearch?.enabled && !!appSettings.tools.braveSearch.apiKey;
+  const imageModelConfigured = !!appSettings.primaryImageModel;
+
+  const toolLines: string[] = [];
+  if (braveEnabled) {
+    toolLines.push('- **web_search**: Search the web for current information. Use this proactively when the user asks about recent events, news, real-time data, current prices, weather, or anything that may require up-to-date information beyond your training data.');
+  }
+  if (imageModelConfigured) {
+    toolLines.push('- **generate_image**: Generate a brand new image from a text description. Use this only when the user asks you to create, draw, generate, or make a completely new image/picture/illustration. Do NOT use this to modify an existing image.');
+    toolLines.push('- **edit_image**: Edit a previously generated image. Use this when the user wants to modify, change, update, or tweak an existing image. Reference the image by its ID from the [Generated Image] annotations in the conversation. Always prefer edit_image over generate_image when the user is referring to an image that was already generated in the conversation.');
+  }
+
+  const toolsSection = toolLines.length > 0
+    ? `\n\n## Available Tools\n${toolLines.join('\n')}\n\nUse tools by calling the provided functions directly. After a tool completes, reply to the user in plain natural language describing what you did.`
+    : '';
+
   return `${si.coreInstruction}
 
 ---
+
+## Current Date & Time
+${dateTimeStr} (${timezone})
 
 ## Your Memory
 ${memorySection}
 
 ## Your Database
-${schemaSection}`;
+${schemaSection}${toolsSection}`;
 }

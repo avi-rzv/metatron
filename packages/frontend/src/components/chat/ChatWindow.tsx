@@ -8,7 +8,7 @@ interface ChatWindowProps {
 }
 
 export function ChatWindow({ messages }: ChatWindowProps) {
-  const { isStreaming, streamingContent } = useChatStore();
+  const { isStreaming, streamingContent, streamingCitations, streamingMedia } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,7 +23,13 @@ export function ChatWindow({ messages }: ChatWindowProps) {
         <ChatMessage key={msg.id} message={msg} />
       ))}
 
-      {isStreaming && <StreamingMessage content={streamingContent} />}
+      {isStreaming && (
+        <StreamingMessage
+          content={streamingContent}
+          citations={streamingCitations}
+          streamingMedia={streamingMedia}
+        />
+      )}
 
       <div ref={bottomRef} />
     </div>

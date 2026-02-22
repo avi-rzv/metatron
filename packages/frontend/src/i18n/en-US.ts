@@ -6,6 +6,7 @@ export const enUS = {
     gallery: 'Gallery',
     modelManager: 'Model Manager',
     systemInstruction: 'System Instruction',
+    memory: 'Memory',
     tools: 'Tools',
     settings: 'Settings',
   },
@@ -53,6 +54,10 @@ export const enUS = {
     microphoneError: 'Could not access microphone',
     transcriptionError: 'Failed to transcribe audio',
     noOpenAIKey: 'OpenAI API key required for voice transcription',
+    pastWeek: 'Past Week',
+    older: 'Older',
+    renameChat: 'Rename',
+    deleteChatConfirm: 'Delete this chat?',
   },
 
   modelSelector: {

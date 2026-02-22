@@ -255,19 +255,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
   if (isUser) {
     const audioAttachment = message.attachments?.find((a) => a.mimeType.startsWith('audio/'));
     const nonAudioAttachments = message.attachments?.filter((a) => !a.mimeType.startsWith('audio/')) ?? [];
+    const isVoice = !!(message.localAudioUrl || audioAttachment);
 
-    if (audioAttachment) {
+    if (isVoice) {
+      const audioSrc = message.localAudioUrl || (audioAttachment ? getUploadUrl(audioAttachment.id) : '');
+      const isTranscribing = !!(message.localAudioUrl && !message.content);
+
       return (
         <div className="group flex justify-end px-4 py-1 animate-fade-in">
           <div className="max-w-[75%]">
             <div className="rounded-2xl rounded-tr-sm bg-gray-100 px-4 py-3">
-              <AudioPlayer src={getUploadUrl(audioAttachment.id)} />
-              {message.content && (
+              {audioSrc && <AudioPlayer src={audioSrc} />}
+              {isTranscribing ? (
+                <p className="mt-2 text-xs italic text-gray-400 leading-relaxed animate-pulse">{t.chat.transcribing}</p>
+              ) : message.content ? (
                 <p className="mt-2 text-xs italic text-gray-500 leading-relaxed">{message.content}</p>
-              )}
+              ) : null}
             </div>
             <div className="mt-1 flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              <CopyButton text={message.content} />
+              {message.content && <CopyButton text={message.content} />}
               <span className="text-[11px] text-gray-400">{formatTime(message.createdAt)}</span>
             </div>
           </div>

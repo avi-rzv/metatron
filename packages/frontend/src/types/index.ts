@@ -36,6 +36,7 @@ export interface Message {
   citations?: Citation[] | null;
   media?: Media[];
   attachments?: Attachment[];
+  localAudioUrl?: string;
   createdAt: string;
 }
 

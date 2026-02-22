@@ -56,7 +56,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCountRef = useRef(0);
-  const { isRecording, duration, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
+  const { isRecording, duration, startRecording, stopRecording, cancelRecording, getElapsedMs } = useVoiceRecorder();
+  const pointerTypeRef = useRef<string>('');
 
   // Generate image previews
   useEffect(() => {
@@ -191,7 +192,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     }
   };
 
-  const handleMicDown = async () => {
+  const tryStartRecording = async () => {
     if (disabled || isRecording) return;
     try {
       await startRecording();
@@ -200,17 +201,50 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     }
   };
 
-  const handleMicUp = async () => {
+  const stopAndSend = async () => {
     if (!isRecording) return;
+    if (getElapsedMs() < 500) {
+      cancelRecording();
+      return;
+    }
     const blob = await stopRecording();
     if (blob && onSendVoice) {
       onSendVoice(blob);
     }
   };
 
+  // Mic button (not recording): onPointerDown stores pointerType, starts on touch
+  const handleMicPointerDown = async (e: React.PointerEvent) => {
+    pointerTypeRef.current = e.pointerType;
+    if (e.pointerType === 'touch') {
+      await tryStartRecording();
+    }
+  };
+
+  // Mic button click: starts recording for non-touch (mouse/pen)
+  const handleMicClick = async () => {
+    if (pointerTypeRef.current !== 'touch') {
+      await tryStartRecording();
+    }
+  };
+
+  // Stop button click: works for both desktop and mobile tap
+  const handleStopClick = async () => {
+    await stopAndSend();
+  };
+
   const handleCancelRecording = () => {
     cancelRecording();
   };
+
+  // Document pointerup listener for mobile press-and-hold release
+  useEffect(() => {
+    if (!isRecording || pointerTypeRef.current !== 'touch') return;
+    const handler = () => { stopAndSend(); };
+    document.addEventListener('pointerup', handler);
+    return () => { document.removeEventListener('pointerup', handler); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording]);
 
   const formatRecordingDuration = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -287,7 +321,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             </span>
           </div>
           <button
-            onPointerUp={handleMicUp}
+            onClick={handleStopClick}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150"
             aria-label={t.chat.send}
             type="button"
@@ -345,8 +379,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               </button>
             ) : (
               <button
-                onPointerDown={handleMicDown}
-                onPointerUp={handleMicUp}
+                onPointerDown={handleMicPointerDown}
+                onClick={handleMicClick}
                 disabled={disabled}
                 aria-label={t.chat.recordVoice}
                 type="button"

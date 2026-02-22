@@ -13,7 +13,7 @@ export type ThinkingLevel = 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 interface GeminiMessage {
   role: 'user' | 'model';
-  parts: Array<{ text: string }>;
+  parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>;
 }
 
 interface GeminiStreamOptions {
@@ -22,9 +22,11 @@ interface GeminiStreamOptions {
   thinkingLevel: ThinkingLevel;
   history: GeminiMessage[];
   userMessage: string;
+  attachments?: Array<{ mimeType: string; data: string }>;
   systemInstruction?: string | null;
   toolCallbacks?: AIToolCallbacks | null;
   onChunk: (text: string) => void;
+  onCitations?: (citations: { url: string; title: string }[]) => void;
   onDone: () => void;
   onError: (err: Error) => void;
 }
@@ -72,6 +74,46 @@ const TOOL_DECLARATIONS: FunctionDeclaration[] = [
       required: ['schema'],
     },
   },
+  {
+    name: 'generate_image',
+    description: 'Generate an image from a text description. Use this when the user asks you to create, draw, generate, or make an image/picture/illustration.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        prompt: {
+          type: Type.STRING,
+          description: 'A detailed description of the image to generate.',
+        },
+        short_description: {
+          type: Type.STRING,
+          description: 'A short 3-5 word label describing what is in the image (e.g. "sunset over the ocean", "black cat sleeping"). Used as a caption.',
+        },
+      },
+      required: ['prompt', 'short_description'],
+    },
+  },
+  {
+    name: 'edit_image',
+    description: 'Edit a previously generated image. Use this when the user wants to modify, change, or update an existing image. Reference the image by its ID from the [Generated Image] annotations in the conversation.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        image_id: {
+          type: Type.STRING,
+          description: 'The ID of the previously generated image to edit (from [Generated Image] annotations).',
+        },
+        prompt: {
+          type: Type.STRING,
+          description: 'A detailed description of the changes to make to the image.',
+        },
+        short_description: {
+          type: Type.STRING,
+          description: 'A short 3-5 word label describing the edited image (e.g. "forest at night", "cat with hat"). Used as a caption.',
+        },
+      },
+      required: ['image_id', 'prompt', 'short_description'],
+    },
+  },
 ];
 
 async function executeFunctionCalls(
@@ -94,6 +136,27 @@ async function executeFunctionCalls(
         break;
       case 'update_db_schema':
         resultStr = await callbacks.updateDbSchema(args.schema ?? '');
+        break;
+      case 'web_search':
+        if (callbacks.webSearch) {
+          resultStr = await callbacks.webSearch(args.query ?? '');
+        } else {
+          resultStr = JSON.stringify({ error: 'Web search is not enabled' });
+        }
+        break;
+      case 'generate_image':
+        if (callbacks.generateImage) {
+          resultStr = await callbacks.generateImage(args.prompt ?? '', args.short_description ?? '');
+        } else {
+          resultStr = JSON.stringify({ error: 'Image generation is not enabled' });
+        }
+        break;
+      case 'edit_image':
+        if (callbacks.editImage) {
+          resultStr = await callbacks.editImage(args.image_id ?? '', args.prompt ?? '', args.short_description ?? '');
+        } else {
+          resultStr = JSON.stringify({ error: 'Image editing is not enabled' });
+        }
         break;
       default:
         resultStr = JSON.stringify({ error: `Unknown function: ${name}` });
@@ -128,7 +191,33 @@ export async function streamGeminiChat(opts: GeminiStreamOptions): Promise<void>
   }
 
   if (opts.toolCallbacks) {
-    config.tools = [{ functionDeclarations: TOOL_DECLARATIONS }];
+    const declarations = [...TOOL_DECLARATIONS];
+    if (opts.toolCallbacks.webSearch) {
+      declarations.push({
+        name: 'web_search',
+        description: 'Search the web for current information. Use this when the user asks about recent events, news, current data, or anything that may require up-to-date information.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: {
+              type: Type.STRING,
+              description: 'The search query to look up on the web.',
+            },
+          },
+          required: ['query'],
+        },
+      });
+    }
+    // Remove image tools from declarations if callbacks are not available
+    if (!opts.toolCallbacks.generateImage) {
+      const idx = declarations.findIndex(d => d.name === 'generate_image');
+      if (idx !== -1) declarations.splice(idx, 1);
+    }
+    if (!opts.toolCallbacks.editImage) {
+      const idx = declarations.findIndex(d => d.name === 'edit_image');
+      if (idx !== -1) declarations.splice(idx, 1);
+    }
+    config.tools = [{ functionDeclarations: declarations }];
     config.toolConfig = {
       functionCallingConfig: {
         mode: FunctionCallingConfigMode.AUTO,
@@ -143,9 +232,23 @@ export async function streamGeminiChat(opts: GeminiStreamOptions): Promise<void>
   });
 
   try {
+    // Build message parts (text + optional attachments)
+    const messageParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+    if (opts.userMessage) {
+      messageParts.push({ text: opts.userMessage });
+    }
+    if (opts.attachments?.length) {
+      for (const att of opts.attachments) {
+        messageParts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+      }
+    }
+
     // Initial message
-    let stream = await chat.sendMessageStream({ message: opts.userMessage });
+    let stream = await chat.sendMessageStream({
+      message: messageParts.length === 1 && 'text' in messageParts[0] ? opts.userMessage : messageParts,
+    });
     let pendingFunctionCalls: FunctionCall[] = [];
+    let lastGroundingMetadata: Record<string, unknown> | undefined;
 
     for await (const chunk of stream) {
       if (chunk.text) {
@@ -153,6 +256,10 @@ export async function streamGeminiChat(opts: GeminiStreamOptions): Promise<void>
       }
       if (chunk.functionCalls) {
         pendingFunctionCalls.push(...chunk.functionCalls);
+      }
+      const metadata = (chunk as any).candidates?.[0]?.groundingMetadata;
+      if (metadata) {
+        lastGroundingMetadata = metadata;
       }
     }
 
@@ -168,6 +275,23 @@ export async function streamGeminiChat(opts: GeminiStreamOptions): Promise<void>
         }
         if (chunk.functionCalls) {
           pendingFunctionCalls.push(...chunk.functionCalls);
+        }
+        const metadata = (chunk as any).candidates?.[0]?.groundingMetadata;
+        if (metadata) {
+          lastGroundingMetadata = metadata;
+        }
+      }
+    }
+
+    // Extract citations from grounding metadata
+    if (lastGroundingMetadata && opts.onCitations) {
+      const chunks = (lastGroundingMetadata as any).groundingChunks as any[] | undefined;
+      if (chunks?.length) {
+        const citations = chunks
+          .filter((c: any) => c.web)
+          .map((c: any) => ({ url: c.web.uri ?? '', title: c.web.title ?? '' }));
+        if (citations.length > 0) {
+          opts.onCitations(citations);
         }
       }
     }

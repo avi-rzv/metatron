@@ -27,7 +27,6 @@ export function ChatPage() {
   const [provider, setProvider] = useState<Provider>('gemini');
   const [model, setModel] = useState<string>(ALL_MODELS[0].id);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const dragCountRef = useRef(0);
@@ -202,26 +201,10 @@ export function ChatPage() {
   };
 
   const handleSendVoice = async (audioBlob: Blob) => {
-    if (isStreaming || isTranscribing) return;
+    if (isStreaming) return;
 
-    setIsTranscribing(true);
-
-    let transcription: string;
-    let audioMeta: { filename: string; mimeType: string; size: number };
-
-    try {
-      const result = await api.voice.transcribe(audioBlob);
-      transcription = result.transcription;
-      audioMeta = { filename: result.filename, mimeType: result.mimeType, size: result.size };
-    } catch (err) {
-      console.error('Transcription failed:', err);
-      setIsTranscribing(false);
-      return;
-    }
-
-    setIsTranscribing(false);
-
-    if (!transcription.trim()) return;
+    // Create local blob URL for immediate playback
+    const localAudioUrl = URL.createObjectURL(audioBlob);
 
     let currentChatId = chatId;
 
@@ -232,15 +215,47 @@ export function ChatPage() {
       navigate(`/chat/${chat.id}`, { replace: true });
     }
 
+    // Show optimistic message immediately with audio player and empty content
     const tempUserMsg: Message = {
       id: 'temp-user-' + Date.now(),
       chatId: currentChatId,
       role: 'user',
-      content: transcription,
+      content: '',
+      localAudioUrl,
       createdAt: new Date().toISOString(),
     };
     setLocalMessages((prev) => [...prev, tempUserMsg]);
 
+    // Transcribe in background
+    let transcription: string;
+    let audioMeta: { filename: string; mimeType: string; size: number };
+
+    try {
+      const result = await api.voice.transcribe(audioBlob);
+      transcription = result.transcription;
+      audioMeta = { filename: result.filename, mimeType: result.mimeType, size: result.size };
+    } catch (err) {
+      console.error('Transcription failed:', err);
+      // Remove the optimistic message on failure
+      setLocalMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+      URL.revokeObjectURL(localAudioUrl);
+      return;
+    }
+
+    if (!transcription.trim()) {
+      setLocalMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+      URL.revokeObjectURL(localAudioUrl);
+      return;
+    }
+
+    // Update optimistic message with transcription text
+    setLocalMessages((prev) =>
+      prev.map((m) =>
+        m.id === tempUserMsg.id ? { ...m, content: transcription } : m
+      )
+    );
+
+    // Now stream the LLM response
     setStreaming({ isStreaming: true, streamingContent: '', streamingMessageId: null });
 
     streamMessage(currentChatId, transcription, { provider, model, audio: audioMeta }, {
@@ -348,7 +363,7 @@ export function ChatPage() {
       {/* Input — outside the scroll container, always anchored at the bottom */}
       <div className="flex justify-center bg-white px-4 pb-4 pt-2">
         <div className="w-full max-w-3xl">
-          <ChatInput ref={chatInputRef} onSend={handleSend} onSendVoice={handleSendVoice} disabled={isStreaming || isTranscribing} isDraggingOver={isDraggingOver} />
+          <ChatInput ref={chatInputRef} onSend={handleSend} onSendVoice={handleSendVoice} disabled={isStreaming} isDraggingOver={isDraggingOver} />
         </div>
       </div>
 

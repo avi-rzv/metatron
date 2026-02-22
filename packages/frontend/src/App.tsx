@@ -4,6 +4,9 @@ import { Layout } from '@/components/layout/Layout';
 import { ChatPage } from '@/pages/ChatPage';
 import { ModelManagerPage } from '@/pages/ModelManagerPage';
 import { SystemInstructionPage } from '@/pages/SystemInstructionPage';
+import { SettingsPage } from '@/pages/SettingsPage';
+import { ToolsPage } from '@/pages/ToolsPage';
+import { GalleryPage } from '@/pages/GalleryPage';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 
 const queryClient = new QueryClient({
@@ -26,6 +29,9 @@ export default function App() {
             <Route path="/chat/:chatId" element={<ChatPage />} />
             <Route path="/system-instruction" element={<SystemInstructionPage />} />
             <Route path="/models" element={<ModelManagerPage />} />
+            <Route path="/tools" element={<ToolsPage />} />
+            <Route path="/gallery" element={<GalleryPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>
         <ToastContainer />

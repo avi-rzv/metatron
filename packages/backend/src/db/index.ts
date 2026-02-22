@@ -46,4 +46,57 @@ sqlite.exec(`
   );
 `);
 
+// Migrations: add columns that may not exist yet
+try {
+  sqlite.exec(`ALTER TABLE messages ADD COLUMN citations TEXT`);
+} catch {
+  // Column already exists — ignore
+}
+
+// Migration: create media table
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS media (
+    id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    short_description TEXT NOT NULL DEFAULT '',
+    mime_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+`);
+
+try {
+  sqlite.exec(`ALTER TABLE media ADD COLUMN short_description TEXT NOT NULL DEFAULT ''`);
+} catch {
+  // Column already exists — ignore
+}
+
+try {
+  sqlite.exec(`ALTER TABLE media ADD COLUMN source_media_id TEXT`);
+} catch {
+  // Column already exists — ignore
+}
+
+// Migration: create attachments table
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+`);
+
+// Ensure media and uploads directories exist
+await mkdir('./data/media', { recursive: true });
+await mkdir('./data/uploads', { recursive: true });
+
 export { schema };

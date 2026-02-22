@@ -8,14 +8,19 @@ import {
   faUser,
   faRightFromBracket,
   faXmark,
+  faGear,
+  faToolbox,
+  faImages,
 } from '@fortawesome/free-solid-svg-icons';
 import { useUIStore } from '@/store/uiStore';
 import { t } from '@/i18n';
 
 const navItems = [
   { to: '/chat', icon: faComments, label: t.nav.chat },
-  { to: '/system-instruction', icon: faBrain, label: t.nav.systemInstruction },
+  { to: '/gallery', icon: faImages, label: t.nav.gallery },
   { to: '/models', icon: faSlidersH, label: t.nav.modelManager },
+  { to: '/tools', icon: faToolbox, label: t.nav.tools },
+  { to: '/system-instruction', icon: faBrain, label: t.nav.memory },
 ];
 
 export function SidePanel() {
@@ -81,6 +86,26 @@ export function SidePanel() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Settings link — always at the bottom of the nav area */}
+        <div className="px-2 pb-1">
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-all duration-150 active:scale-[0.97]',
+                isActive
+                  ? 'bg-black text-white hover:bg-black/90'
+                  : 'text-gray-700 hover:bg-gray-100',
+                collapsed ? 'justify-center' : '',
+              ].join(' ')
+            }
+            title={collapsed ? t.nav.settings : undefined}
+          >
+            <FontAwesomeIcon icon={faGear} className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="truncate">{t.nav.settings}</span>}
+          </NavLink>
+        </div>
 
         {/* Footer */}
         <div
