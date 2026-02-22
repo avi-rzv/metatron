@@ -16,7 +16,7 @@ export function ChatWindow({ messages }: ChatWindowProps) {
   }, [messages, streamingContent]);
 
   return (
-    <div className="flex-1 overflow-y-auto py-4 space-y-2">
+    <div className="py-4 space-y-2">
       {messages.map((msg) => (
         <ChatMessage key={msg.id} message={msg} />
       ))}

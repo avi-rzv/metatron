@@ -151,8 +151,8 @@ export function ChatPage() {
       </div>
 
       {/* Chat area — centered on desktop */}
-      <div className="flex flex-1 overflow-hidden justify-center">
-        <div className="flex flex-1 flex-col w-full max-w-3xl overflow-hidden">
+      <div className="flex flex-1 overflow-y-auto justify-center">
+        <div className="flex flex-1 flex-col w-full max-w-3xl">
           {messages.length === 0 && !isStreaming ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
               <p className="text-2xl font-semibold text-gray-800">{t.appName}</p>
@@ -163,7 +163,7 @@ export function ChatPage() {
           )}
 
           {/* Input */}
-          <div className="px-4 pb-4 pt-2">
+          <div className="sticky bottom-0 bg-white px-4 pb-4 pt-2">
             <ChatInput onSend={handleSend} disabled={isStreaming} />
           </div>
         </div>
