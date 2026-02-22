@@ -54,12 +54,14 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
   const qc = useQueryClient();
   const ref = useRef<HTMLDivElement>(null);
 
-  // Dropdown state
+  // Dropdown state (desktop)
   const [dropdownChatId, setDropdownChatId] = useState<string | null>(null);
-  // Inline rename state
-  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  // Rename dialog state
+  const [renameDialogChat, setRenameDialogChat] = useState<Chat | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  // Delete dialog state
+  const [deleteDialogChat, setDeleteDialogChat] = useState<Chat | null>(null);
   // Mobile bottom sheet state
   const [bottomSheetChat, setBottomSheetChat] = useState<Chat | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,8 +122,9 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
 
   const resetState = useCallback(() => {
     setDropdownChatId(null);
-    setRenamingChatId(null);
+    setRenameDialogChat(null);
     setRenameValue('');
+    setDeleteDialogChat(null);
     setBottomSheetChat(null);
   }, []);
 
@@ -151,37 +154,41 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownChatId]);
 
-  // Auto-focus rename input
+  // Auto-focus rename dialog input
   useEffect(() => {
-    if (renamingChatId && renameInputRef.current) {
+    if (renameDialogChat && renameInputRef.current) {
       renameInputRef.current.focus();
       renameInputRef.current.select();
     }
-  }, [renamingChatId]);
+  }, [renameDialogChat]);
 
-  function startRename(chat: Chat) {
+  function openRenameDialog(chat: Chat) {
     setDropdownChatId(null);
     setBottomSheetChat(null);
-    setRenamingChatId(chat.id);
+    setRenameDialogChat(chat);
     setRenameValue(chat.title);
   }
 
   function commitRename() {
-    if (!renamingChatId) return;
+    if (!renameDialogChat) return;
     const trimmed = renameValue.trim();
-    if (trimmed && trimmed !== chats.find((c) => c.id === renamingChatId)?.title) {
-      renameChat.mutate({ id: renamingChatId, title: trimmed });
+    if (trimmed && trimmed !== renameDialogChat.title) {
+      renameChat.mutate({ id: renameDialogChat.id, title: trimmed });
     }
-    setRenamingChatId(null);
+    setRenameDialogChat(null);
     setRenameValue('');
   }
 
-  function handleDelete(chat: Chat) {
+  function openDeleteDialog(chat: Chat) {
     setDropdownChatId(null);
     setBottomSheetChat(null);
-    if (confirm(t.chat.deleteChatConfirm)) {
-      deleteChat.mutate(chat.id);
-    }
+    setDeleteDialogChat(chat);
+  }
+
+  function confirmDelete() {
+    if (!deleteDialogChat) return;
+    deleteChat.mutate(deleteDialogChat.id);
+    setDeleteDialogChat(null);
   }
 
   // Long-press handlers for mobile
@@ -200,7 +207,6 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
 
   function renderChatItem(chat: Chat) {
     const isActive = activeChatId === chat.id;
-    const isRenaming = renamingChatId === chat.id;
     const isDropdownOpen = dropdownChatId === chat.id;
 
     return (
@@ -211,7 +217,6 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
             isActive ? 'bg-gray-100' : 'hover:bg-gray-50',
           ].join(' ')}
           onClick={() => {
-            if (isRenaming) return;
             setActiveChatId(chat.id);
             navigate(`/chat/${chat.id}`);
             setRightPanelOpen(false);
@@ -220,69 +225,49 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
           onTouchEnd={cancelLongPress}
           onTouchMove={cancelLongPress}
         >
-          {isRenaming ? (
-            <input
-              ref={renameInputRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename();
-                if (e.key === 'Escape') {
-                  setRenamingChatId(null);
-                  setRenameValue('');
-                }
-              }}
-              onBlur={commitRename}
-              onClick={(e) => e.stopPropagation()}
-              className="flex-1 min-w-0 text-sm text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-0.5 outline-none focus:border-gray-500"
-            />
-          ) : (
-            <span className="flex-1 truncate text-sm text-gray-700">{chat.title}</span>
-          )}
+          <span className="flex-1 truncate text-sm text-gray-700">{chat.title}</span>
 
           {/* Desktop 3-dot menu */}
-          {!isRenaming && (
-            <div className="relative" data-dropdown>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDropdownChatId(isDropdownOpen ? null : chat.id);
-                }}
-                className={[
-                  'h-6 w-6 items-center justify-center rounded-full hover:bg-gray-200 active:scale-90 transition-all duration-150',
-                  isDropdownOpen ? 'flex bg-gray-200' : 'flex opacity-0 group-hover:opacity-100',
-                ].join(' ')}
-                aria-label="Chat options"
-              >
-                <FontAwesomeIcon icon={faEllipsisVertical} className="text-[10px] text-gray-400" />
-              </button>
+          <div className="relative" data-dropdown>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDropdownChatId(isDropdownOpen ? null : chat.id);
+              }}
+              className={[
+                'h-6 w-6 items-center justify-center rounded-full hover:bg-gray-200 active:scale-90 transition-all duration-150',
+                isDropdownOpen ? 'flex bg-gray-200' : 'flex opacity-0 group-hover:opacity-100',
+              ].join(' ')}
+              aria-label="Chat options"
+            >
+              <FontAwesomeIcon icon={faEllipsisVertical} className="text-[10px] text-gray-400" />
+            </button>
 
-              {isDropdownOpen && (
-                <div className="absolute right-0 top-7 z-50 w-36 rounded-lg border border-gray-100 bg-white py-1 shadow-lg">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startRename(chat);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <FontAwesomeIcon icon={faPen} className="text-[10px] text-gray-400" />
-                    {t.chat.renameChat}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(chat);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <FontAwesomeIcon icon={faTrash} className="text-[10px] text-red-400" />
-                    {t.chat.deleteChat}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+            {isDropdownOpen && (
+              <div className="absolute right-0 top-7 z-50 w-36 rounded-lg border border-gray-100 bg-white py-1 shadow-lg">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openRenameDialog(chat);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <FontAwesomeIcon icon={faPen} className="text-[10px] text-gray-400" />
+                  {t.chat.renameChat}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDeleteDialog(chat);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                >
+                  <FontAwesomeIcon icon={faTrash} className="text-[10px] text-red-400" />
+                  {t.chat.deleteChat}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </li>
     );
@@ -300,7 +285,7 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
       <div
         ref={ref}
         className={[
-          'fixed top-0 right-0 h-full z-30 w-72 bg-white border-l border-gray-100 flex flex-col shadow-xl',
+          'fixed top-0 right-0 h-dvh z-30 w-72 bg-white border-l border-gray-100 flex flex-col shadow-xl',
           'transition-transform duration-200 ease-in-out',
           rightPanelOpen ? 'translate-x-0' : 'translate-x-full',
         ].join(' ')}
@@ -404,14 +389,14 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
               {bottomSheetChat.title}
             </p>
             <button
-              onClick={() => startRename(bottomSheetChat)}
+              onClick={() => openRenameDialog(bottomSheetChat)}
               className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               <FontAwesomeIcon icon={faPen} className="text-xs text-gray-400" />
               {t.chat.renameChat}
             </button>
             <button
-              onClick={() => handleDelete(bottomSheetChat)}
+              onClick={() => openDeleteDialog(bottomSheetChat)}
               className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-100"
             >
               <FontAwesomeIcon icon={faTrash} className="text-xs text-red-400" />
@@ -421,10 +406,88 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
         </div>
       )}
 
+      {/* Rename dialog */}
+      {renameDialogChat && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => {
+              setRenameDialogChat(null);
+              setRenameValue('');
+            }}
+          />
+          <div className="relative z-10 w-full max-w-xs rounded-2xl bg-white px-5 py-5 shadow-2xl animate-[fadeIn_0.15s_ease-out]">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.chat.renameChatTitle}</h3>
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') {
+                  setRenameDialogChat(null);
+                  setRenameValue('');
+                }
+              }}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setRenameDialogChat(null);
+                  setRenameValue('');
+                }}
+                className="rounded-lg px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+              >
+                {t.chat.cancel}
+              </button>
+              <button
+                onClick={commitRename}
+                disabled={!renameValue.trim()}
+                className="rounded-lg bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-900 active:scale-[0.98] transition-all disabled:opacity-40"
+              >
+                {t.chat.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteDialogChat && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setDeleteDialogChat(null)}
+          />
+          <div className="relative z-10 w-full max-w-xs rounded-2xl bg-white px-5 py-5 shadow-2xl animate-[fadeIn_0.15s_ease-out]">
+            <p className="text-sm text-gray-700">{t.chat.deleteChatConfirm}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteDialogChat(null)}
+                className="rounded-lg px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+              >
+                {t.chat.no}
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-lg bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700 active:scale-[0.98] transition-all"
+              >
+                {t.chat.yes}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes slideUp {
           from { transform: translateY(100%); }
           to { transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </>

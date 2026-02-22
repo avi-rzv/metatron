@@ -308,11 +308,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         <div className="flex items-center gap-3 px-3 py-3">
           <button
             onClick={handleCancelRecording}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
+            className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
             aria-label={t.chat.cancelRecording}
             type="button"
           >
-            <FontAwesomeIcon icon={faXmark} className="text-sm" />
+            <FontAwesomeIcon icon={faXmark} className="text-base md:text-sm" />
           </button>
           <div className="flex flex-1 items-center justify-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
@@ -322,23 +322,23 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           </div>
           <button
             onClick={handleStopClick}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150"
+            className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150"
             aria-label={t.chat.send}
             type="button"
           >
-            <FontAwesomeIcon icon={faStop} className="text-xs" />
+            <FontAwesomeIcon icon={faStop} className="text-sm md:text-xs" />
           </button>
         </div>
       ) : (
         <div className="flex items-end gap-2 px-3 py-3">
           {/* Attach button */}
           <button
-            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
+            className="mb-0.5 flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
             aria-label={t.chat.attach}
             type="button"
             onClick={() => fileInputRef.current?.click()}
           >
-            <FontAwesomeIcon icon={faPlus} className="text-sm" />
+            <FontAwesomeIcon icon={faPlus} className="text-base md:text-sm" />
           </button>
           <input
             ref={fileInputRef}
@@ -373,9 +373,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 disabled={disabled || !hasSendable}
                 aria-label={t.chat.send}
                 type="button"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150 disabled:opacity-50"
+                className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150 disabled:opacity-50"
               >
-                <FontAwesomeIcon icon={faPaperPlane} className="text-xs" />
+                <FontAwesomeIcon icon={faPaperPlane} className="text-sm md:text-xs" />
               </button>
             ) : (
               <button
@@ -384,9 +384,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 disabled={disabled}
                 aria-label={t.chat.recordVoice}
                 type="button"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150 disabled:opacity-50"
+                className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150 disabled:opacity-50"
               >
-                <FontAwesomeIcon icon={faMicrophone} className="text-sm" />
+                <FontAwesomeIcon icon={faMicrophone} className="text-base md:text-sm" />
               </button>
             )}
           </div>

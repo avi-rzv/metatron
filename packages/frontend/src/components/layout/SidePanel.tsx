@@ -44,7 +44,7 @@ export function SidePanel() {
         className={[
           'flex flex-col bg-white border-r border-gray-100 z-30 transition-all duration-200 ease-in-out',
           isMobile
-            ? `fixed top-0 left-0 h-full ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`
+            ? `fixed top-0 left-0 h-dvh ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`
             : `relative h-full ${collapsed ? 'w-16' : 'w-56'}`,
         ].join(' ')}
       >

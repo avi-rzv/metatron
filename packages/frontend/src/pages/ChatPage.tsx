@@ -9,6 +9,7 @@ import { ChatInput, type ChatInputHandle } from '@/components/chat/ChatInput';
 import { RightPanel } from '@/components/chat/RightPanel';
 import { useUIStore } from '@/store/uiStore';
 import { useChatStore } from '@/store/chatStore';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { api, streamMessage } from '@/api';
 import { t } from '@/i18n';
 import type { Provider, Message } from '@/types';
@@ -20,6 +21,7 @@ export function ChatPage() {
   const qc = useQueryClient();
   const { toggleRightPanel, isMobile, toggleSidebar } = useUIStore();
   const { isStreaming, setStreaming, appendStreamChunk, setStreamingCitations, addStreamingMedia, stopStreaming } = useChatStore();
+  const keyboardHeight = useKeyboardHeight();
 
   // Default provider/model from settings if available
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings.get });
@@ -318,6 +320,10 @@ export function ChatPage() {
   return (
     <div
       className="flex h-full flex-col"
+      style={{
+        paddingBottom: isMobile && keyboardHeight > 0 ? `${keyboardHeight}px` : undefined,
+        transition: isMobile ? 'padding-bottom 0.2s ease-out' : undefined,
+      }}
       onDragEnter={handlePageDragEnter}
       onDragLeave={handlePageDragLeave}
       onDragOver={handlePageDragOver}

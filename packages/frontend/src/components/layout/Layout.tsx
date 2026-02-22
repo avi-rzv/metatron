@@ -15,7 +15,7 @@ export function Layout() {
   }, [setIsMobile]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white">
+    <div className="flex h-dvh overflow-hidden bg-white">
       <SidePanel />
       <main className="flex-1 overflow-hidden">
         <Outlet />

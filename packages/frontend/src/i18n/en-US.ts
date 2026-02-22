@@ -57,7 +57,12 @@ export const enUS = {
     pastWeek: 'Past Week',
     older: 'Older',
     renameChat: 'Rename',
-    deleteChatConfirm: 'Delete this chat?',
+    renameChatTitle: 'Rename Chat',
+    deleteChatConfirm: 'This action will delete the chat. Continue?',
+    yes: 'Yes',
+    no: 'No',
+    save: 'Save',
+    cancel: 'Cancel',
   },
 
   modelSelector: {
