@@ -44,9 +44,10 @@ export function SidePanel() {
         className={[
           'flex flex-col bg-white border-r border-gray-100 z-30 transition-all duration-200 ease-in-out',
           isMobile
-            ? `fixed top-0 left-0 h-dvh ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`
+            ? `fixed left-0 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`
             : `relative h-full ${collapsed ? 'w-16' : 'w-56'}`,
         ].join(' ')}
+        style={isMobile ? { top: 'var(--vvt, 0px)', height: 'var(--vvh, 100dvh)' } : undefined}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-4 min-h-[60px]">

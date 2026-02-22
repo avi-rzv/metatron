@@ -285,10 +285,11 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
       <div
         ref={ref}
         className={[
-          'fixed top-0 right-0 h-dvh z-30 w-72 bg-white border-l border-gray-100 flex flex-col shadow-xl',
+          'fixed right-0 z-30 w-72 bg-white border-l border-gray-100 flex flex-col shadow-xl',
           'transition-transform duration-200 ease-in-out',
           rightPanelOpen ? 'translate-x-0' : 'translate-x-full',
         ].join(' ')}
+        style={{ top: 'var(--vvt, 0px)', height: 'var(--vvh, 100dvh)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
