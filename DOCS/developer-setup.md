@@ -25,14 +25,18 @@ metatron/                        ← npm workspace root
 │   │   │   │   ├── schema.ts    ← Drizzle schema + inferred TypeScript types
 │   │   │   │   └── index.ts     ← DB connection, WAL pragma, bootstrap DDL
 │   │   │   ├── routes/
-│   │   │   │   ├── chats.ts     ← CRUD + SSE streaming endpoint
-│   │   │   │   └── settings.ts  ← GET/PUT /api/settings
+│   │   │   │   ├── chats.ts              ← CRUD + SSE streaming endpoint
+│   │   │   │   ├── settings.ts           ← GET/PUT /api/settings
+│   │   │   │   └── systemInstruction.ts  ← GET/PUT/DELETE /api/system-instruction
 │   │   │   └── services/
-│   │   │       ├── encryption.ts       ← AES-256-GCM helpers
-│   │   │       ├── settings.ts         ← AppSettings read/write/decrypt
+│   │   │       ├── encryption.ts         ← AES-256-GCM helpers
+│   │   │       ├── settings.ts           ← AppSettings read/write/decrypt
+│   │   │       ├── systemInstruction.ts  ← system prompt + memory + db schema
+│   │   │       ├── aiTools.ts            ← save_memory / db_query / update_db_schema callbacks
+│   │   │       ├── sqlValidator.ts       ← blocks protected tables from AI SQL
 │   │   │       └── llm/
-│   │   │           ├── gemini.ts       ← @google/genai streaming wrapper
-│   │   │           └── openai.ts       ← openai streaming wrapper
+│   │   │           ├── gemini.ts         ← @google/genai streaming + function-calling
+│   │   │           └── openai.ts         ← openai streaming + runTools
 │   │   ├── drizzle.config.ts    ← drizzle-kit config (schema path, dialect, db url)
 │   │   ├── tsconfig.json        ← extends tsconfig.base; NodeNext module resolution
 │   │   └── package.json
@@ -52,8 +56,9 @@ metatron/                        ← npm workspace root
 │       │   │   ├── layout/      ← Layout.tsx, SidePanel.tsx
 │       │   │   └── chat/        ← ChatWindow, ChatMessage, ChatInput, ModelSelector, RightPanel
 │       │   ├── pages/
-│       │   │   ├── ChatPage.tsx          ← main chat UI with SSE integration
-│       │   │   └── ModelManagerPage.tsx  ← API key + model/thinking/image pickers
+│       │   │   ├── ChatPage.tsx              ← main chat UI with SSE integration
+│       │   │   ├── SystemInstructionPage.tsx ← AI identity / memory / db schema editor
+│       │   │   └── ModelManagerPage.tsx      ← API key + model/thinking/image pickers
 │       │   └── styles/globals.css
 │       ├── vite.config.ts       ← dev proxy /api → :4000, chunking strategy
 │       ├── tailwind.config.ts   ← custom fonts, animations (fade-in, slide-in)

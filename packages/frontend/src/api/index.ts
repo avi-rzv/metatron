@@ -1,4 +1,4 @@
-import type { Chat, AppSettings, Message } from '../types';
+import type { Chat, AppSettings, Message, SystemInstruction } from '../types';
 
 const BASE = '/api';
 
@@ -32,6 +32,17 @@ export const api = {
     update: (data: Partial<AppSettings>) =>
       request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
     revealKeys: () => request<{ gemini: string; openai: string }>('/settings/keys'),
+  },
+
+  systemInstruction: {
+    get: () => request<SystemInstruction>('/system-instruction'),
+    update: (data: Partial<SystemInstruction>) =>
+      request<SystemInstruction>('/system-instruction', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    clearMemory: () => fetch(`${BASE}/system-instruction/memory`, { method: 'DELETE' }),
+    clearDbSchema: () => fetch(`${BASE}/system-instruction/db-schema`, { method: 'DELETE' }),
   },
 };
 

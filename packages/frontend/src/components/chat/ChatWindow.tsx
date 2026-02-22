@@ -12,8 +12,10 @@ export function ChatWindow({ messages }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    if (isStreaming) {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+    }
+  }, [isStreaming, streamingContent]);
 
   return (
     <div className="py-4 space-y-2">

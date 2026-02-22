@@ -8,6 +8,15 @@ This document covers implementation details that are not obvious from reading th
 
 The SQLite file path comes from `DATABASE_URL`. The directory is created with `mkdir -p` semantics before the connection is opened, so a missing `./data/` directory never causes a startup failure.
 
+Two exports are provided:
+
+```typescript
+export const sqlite: DatabaseType  // raw better-sqlite3 instance
+export const db                    // Drizzle ORM instance wrapping sqlite
+```
+
+`sqlite` is used by `src/services/aiTools.ts` to execute arbitrary AI-generated SQL statements. All other application code should use `db` (Drizzle) for type-safe queries scoped to the known schema tables.
+
 Two pragmas are set immediately after opening:
 
 - `journal_mode = WAL` — Write-Ahead Logging allows concurrent reads during a write. With a single-user system the concurrency benefit is minimal, but WAL also improves write throughput on spinning disks.
@@ -202,19 +211,40 @@ This means you can update `defaultModel` for gemini without touching `apiKey`, a
 
 ---
 
+## System instruction service (`src/services/systemInstruction.ts`)
+
+Stores the AI's combined system prompt configuration as a JSON blob in the `settings` table under the key `system_instruction`. See `DOCS/ai-tools.md` for full coverage. Key points relevant to the internals:
+
+- `buildCombinedPrompt()` returns `null` when `coreInstruction` is blank — the adapters treat a null system instruction as "don't set a system prompt".
+- `updateMemory()` enforces a hard 4,000-character limit before calling `updateSystemInstruction()`. This is the only field with a size constraint.
+- All writes stamp `updatedAt` with `new Date().toISOString()` server-side; the client never provides this field.
+
+## AI tool callbacks (`src/services/aiTools.ts`)
+
+Provides `createAIToolCallbacks()` which returns the three tool implementations (`saveMemory`, `dbQuery`, `updateDbSchema`). All methods return JSON strings (the serialised result fed back to the LLM). `dbQuery` uses the raw `sqlite` export from `src/db/index.ts` to execute arbitrary SQL, guarded by `validateAIQuery()`. See `DOCS/ai-tools.md` for full coverage.
+
+## SQL validator (`src/services/sqlValidator.ts`)
+
+Single exported function `validateAIQuery(sql)`. Tests the SQL string against word-boundary regexes for each of the three protected table names (`chats`, `messages`, `settings`). Returns `{ valid: true }` or `{ valid: false, error: string }`. The check is intentionally simple — it uses a regex against the raw SQL text rather than parsing an AST, which is an accepted trade-off in a single-user trusted environment.
+
+---
+
 ## LLM adapters
 
-Both adapters (`src/services/llm/gemini.ts`, `src/services/llm/openai.ts`) follow the same callback-based streaming interface:
+Both adapters (`src/services/llm/gemini.ts`, `src/services/llm/openai.ts`) follow the same callback-based streaming interface, extended with optional system instruction and tool callbacks:
 
 ```typescript
+// Shared fields across both adapters
 interface StreamOptions {
   apiKey: string;
   model: string;
   // provider-specific config (thinkingLevel or reasoningEffort)
-  messages / history: ...;
-  onChunk: (text: string) => void;   // called for each text chunk
-  onDone: () => void;                // called when stream ends normally
-  onError: (err: Error) => void;     // called on failure
+  // provider-specific message format (history[] for Gemini, messages[] for OpenAI)
+  systemInstruction?: string | null;    // assembled by buildCombinedPrompt()
+  toolCallbacks?: AIToolCallbacks | null; // null when memoryEnabled is false
+  onChunk: (text: string) => void;      // called for each text chunk
+  onDone: () => void;                   // called when stream ends normally
+  onError: (err: Error) => void;        // called on failure
 }
 ```
 
@@ -222,7 +252,13 @@ Both functions are `async` but the route handler does **not** `await` them — i
 
 ### Gemini adapter
 
-Uses the `@google/genai` SDK (`GoogleGenAI`). The API uses a chat session with history rather than a stateless messages array.
+Uses `@google/genai` SDK version 1.42.0 (`GoogleGenAI`). The API uses a chat session with history rather than a stateless messages array.
+
+The chat is created with `ai.chats.create({ model, config, history })`. The `config` object is built dynamically:
+
+- `thinkingConfig.thinkingBudget` is always set (see budget table below)
+- `systemInstruction` is added if non-null
+- `tools` and `toolConfig` are added only when `toolCallbacks` is non-null
 
 **Thinking budget mapping** (`thinkingLevel` → `thinkingBudget` token count):
 
@@ -233,23 +269,37 @@ Uses the `@google/genai` SDK (`GoogleGenAI`). The API uses a chat session with h
 | `MEDIUM` | 4096 |
 | `HIGH` | 8192 |
 
-The budget is passed in `config.thinkingConfig.thinkingBudget` when creating the chat session. History messages use Gemini's role names: `'user'` and `'model'` (not `'assistant'`). The adapter maps `'assistant'` → `'model'` when building the history array in the route handler.
+History messages use Gemini's role names: `'user'` and `'model'` (not `'assistant'`). The adapter maps `'assistant'` → `'model'` when building the history array in the route handler.
+
+**Function-calling loop**: After each `sendMessageStream()` call, the adapter collects any `functionCalls` from the chunks. If any are present, it executes them all via `executeFunctionCalls()` (which calls the appropriate `AIToolCallbacks` method), then sends the resulting `Part[]` array back to the chat session via another `sendMessageStream()`. This loop continues until a turn produces no function calls. `FunctionCallingConfigMode.AUTO` allows Gemini to decide per-turn whether to use a tool or respond directly.
+
+Array results from `dbQuery` are wrapped in `{ data: [...] }` before being returned to Gemini, because the SDK requires function responses to be JSON objects (Struct), not arrays.
 
 ### OpenAI adapter
 
 Uses the official `openai` npm package. Messages use the standard OpenAI format (`role: 'user' | 'assistant' | 'system'`, `content: string`).
 
-The `reasoning_effort` parameter is passed directly to `client.chat.completions.create()`. This is a non-standard parameter supported by reasoning models (o-series). It is cast to the SDK type `ChatCompletionCreateParamsStreaming['reasoning_effort']`. If the selected model does not support this parameter, the OpenAI API will return an error which surfaces as an SSE `error` event.
+If `systemInstruction` is provided, it is prepended to the messages array as a `{ role: 'system', content }` message.
+
+**With tools** (`toolCallbacks` non-null): uses `client.beta.chat.completions.runTools()`. This SDK helper manages the function-calling loop internally. The `content` delta events are forwarded via `onChunk`. `runner.finalChatCompletion()` is awaited before `onDone()` is called.
+
+**Without tools** (`toolCallbacks` is null): uses the standard `client.chat.completions.create({ stream: true })` path.
+
+The `reasoning_effort` parameter is passed in both paths. It is cast to `ChatCompletionCreateParamsStreaming['reasoning_effort']`. If the selected model does not support this parameter, the OpenAI API will return an error which surfaces as an SSE `error` event.
 
 ---
 
 ## Server entry point (`src/index.ts`)
 
 Fastify is instantiated with:
-- Pretty-print logger in development (`NODE_ENV !== 'production'`), JSON logger in production
+- Pretty-print logger in development (`NODE_ENV === 'development'`), JSON logger otherwise
 - CORS restricted to `FRONTEND_ORIGIN` with `credentials: true`
 
 Plugins and routes are registered with `await fastify.register(...)`. Fastify 5 requires awaiting plugin registration — missing `await` causes routes to not be registered before the server starts listening.
+
+Three route modules are registered: `chatRoutes`, `settingsRoutes`, and `systemInstructionRoutes`.
+
+In production (`NODE_ENV !== 'development'`), `@fastify/static` is registered to serve the built frontend from `packages/frontend/dist/`. A `setNotFoundHandler` SPA fallback serves `index.html` for any route not matched by the API, enabling React Router's client-side routing.
 
 The server binds to `HOST:PORT`. `HOST` defaults to `0.0.0.0` (all interfaces), which is correct for a containerised deployment where the Docker port mapping controls external access.
 

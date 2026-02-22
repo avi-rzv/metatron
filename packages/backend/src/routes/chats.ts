@@ -6,6 +6,8 @@ import { nanoid } from 'nanoid';
 import { getDecryptedSettings } from '../services/settings.js';
 import { streamGeminiChat, type GeminiMessage } from '../services/llm/gemini.js';
 import { streamOpenAIChat, type OpenAIMessage } from '../services/llm/openai.js';
+import { buildCombinedPrompt, getSystemInstruction } from '../services/systemInstruction.js';
+import { createAIToolCallbacks } from '../services/aiTools.js';
 
 export async function chatRoutes(fastify: FastifyInstance) {
   // GET /api/chats
@@ -112,6 +114,9 @@ export async function chatRoutes(fastify: FastifyInstance) {
       .filter((m) => m.id !== userMsgId); // exclude the just-inserted message
 
     const settings = await getDecryptedSettings();
+    const systemInstruction = await buildCombinedPrompt();
+    const sysInstr = await getSystemInstruction();
+    const toolCallbacks = sysInstr.memoryEnabled ? createAIToolCallbacks() : null;
 
     // SSE headers
     reply.raw.writeHead(200, {
@@ -151,6 +156,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     };
 
     const onError = (err: Error) => {
+      console.error('[stream error]', err);
       sendEvent('error', { message: err.message });
       reply.raw.end();
     };
@@ -172,6 +178,8 @@ export async function chatRoutes(fastify: FastifyInstance) {
         thinkingLevel: settings.gemini.thinkingLevel,
         history: geminiHistory,
         userMessage: userContent,
+        systemInstruction,
+        toolCallbacks,
         onChunk,
         onDone,
         onError,
@@ -193,6 +201,8 @@ export async function chatRoutes(fastify: FastifyInstance) {
         model: activeModel,
         reasoningEffort: settings.openai.reasoningEffort,
         messages: openAIMessages,
+        systemInstruction,
+        toolCallbacks,
         onChunk,
         onDone,
         onError,

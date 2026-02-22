@@ -4,6 +4,7 @@ export const enUS = {
   nav: {
     chat: 'Chat',
     modelManager: 'Model Manager',
+    systemInstruction: 'System Instruction',
   },
 
   sidebar: {
@@ -90,6 +91,30 @@ export const enUS = {
     },
     noApiKey: 'Add an API key to use this provider',
     keySecured: 'Key stored securely (encrypted)',
+  },
+
+  systemInstruction: {
+    title: 'System Instruction',
+    subtitle: 'Configure AI identity, persistent memory, and database access',
+    coreInstruction: 'Core Instruction',
+    coreInstructionDescription: 'This instruction is injected into every chat session. It defines who the AI is and how it behaves.',
+    coreInstructionPlaceholder: 'Enter the system instruction for the AI...',
+    memory: 'Dynamic Memory',
+    memoryDescription: 'Critical facts the AI stores about you. The AI manages this via the save_memory tool.',
+    memoryPlaceholder: 'No memories stored yet. The AI will populate this as you chat.',
+    enableTools: 'Enable AI Tools',
+    enableToolsDescription: 'Allow the AI to save memories, query its database, and manage schema',
+    charCount: 'characters',
+    save: 'Save',
+    saving: 'Saving…',
+    saved: 'Saved!',
+    clear: 'Clear',
+    clearMemoryConfirm: 'Clear all AI memories? This cannot be undone.',
+    clearSchemaConfirm: 'Clear the AI database schema documentation? This cannot be undone.',
+    dbSchema: 'Database Schema',
+    dbSchemaDescription: 'Documentation of tables the AI has created. The AI manages this via the update_db_schema tool.',
+    dbSchemaPlaceholder: 'No custom tables created yet.',
+    lastUpdated: 'Last updated',
   },
 
   errors: {

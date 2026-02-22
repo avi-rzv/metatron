@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from '@/components/layout/Layout';
 import { ChatPage } from '@/pages/ChatPage';
 import { ModelManagerPage } from '@/pages/ModelManagerPage';
+import { SystemInstructionPage } from '@/pages/SystemInstructionPage';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 
 const queryClient = new QueryClient({
@@ -23,6 +24,7 @@ export default function App() {
             <Route index element={<Navigate to="/chat" replace />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:chatId" element={<ChatPage />} />
+            <Route path="/system-instruction" element={<SystemInstructionPage />} />
             <Route path="/models" element={<ModelManagerPage />} />
           </Route>
         </Routes>

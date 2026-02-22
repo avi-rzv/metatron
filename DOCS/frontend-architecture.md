@@ -21,10 +21,11 @@ This document describes the structure, patterns, and conventions used in `packag
 All routes are nested under the `<Layout>` component, which renders `<SidePanel>` plus an `<Outlet>` for the active page.
 
 ```
-/               → redirect to /chat
-/chat           → ChatPage (no active chat; shows empty state)
-/chat/:chatId   → ChatPage (loads and displays a specific chat)
-/models         → ModelManagerPage
+/                      → redirect to /chat
+/chat                  → ChatPage (no active chat; shows empty state)
+/chat/:chatId          → ChatPage (loads and displays a specific chat)
+/system-instruction    → SystemInstructionPage
+/models                → ModelManagerPage
 ```
 
 Routes are defined in `src/App.tsx`. The `<Layout>` route wrapper handles the media-query listener that drives the mobile/desktop sidebar behaviour.
@@ -75,6 +76,7 @@ Cache keys in use:
 | `['chats']` | `Chat[]` — full list | Create, delete, after stream `done` |
 | `['chat', chatId]` | `Chat & { messages }` — single chat with history | After stream `done` |
 | `['settings']` | `AppSettings` | Settings save mutations |
+| `['system-instruction']` | `SystemInstruction` | Save and clear mutations in `SystemInstructionPage` |
 
 ## Component tree
 
@@ -83,11 +85,12 @@ App
 └── QueryClientProvider
     └── BrowserRouter
         └── Routes
-            └── Route (Layout)          ← SidePanel + Outlet
-                ├── Route (/)           → Navigate /chat
-                ├── Route (/chat)       → ChatPage
-                ├── Route (/chat/:id)   → ChatPage
-                └── Route (/models)     → ModelManagerPage
+            └── Route (Layout)                     ← SidePanel + Outlet
+                ├── Route (/)                      → Navigate /chat
+                ├── Route (/chat)                  → ChatPage
+                ├── Route (/chat/:id)              → ChatPage
+                ├── Route (/system-instruction)    → SystemInstructionPage
+                └── Route (/models)                → ModelManagerPage
 ```
 
 ### Layout (`src/components/layout/Layout.tsx`)
@@ -103,7 +106,13 @@ Two modes depending on `isMobile`:
 
 The hamburger/X icon switches based on `sidebarOpen && isMobile`.
 
-Nav items are defined as a static array at module scope. Each item uses React Router's `<NavLink>` which applies active styling automatically.
+Nav items are defined as a static array at module scope. Each item uses React Router's `<NavLink>` which applies active styling automatically. Current nav items in order:
+
+| Route | Icon | Label |
+|-------|------|-------|
+| `/chat` | `faComments` | Chat |
+| `/system-instruction` | `faBrain` | System Instruction |
+| `/models` | `faSlidersH` | Model Manager |
 
 ### ChatPage (`src/pages/ChatPage.tsx`)
 
@@ -144,6 +153,18 @@ Dropdown rendered as a custom `<ul role="listbox">`. Closes when the user clicks
 
 Slides in from the right (`translate-x-full` → `translate-x-0`). Lists all chats from the `['chats']` query. Allows creating a new chat with the currently selected provider/model, navigating to an existing chat, and deleting a chat. Closes on outside click.
 
+### SystemInstructionPage (`src/pages/SystemInstructionPage.tsx`)
+
+Presents three sections, each in a `<Section>` card:
+
+1. **Core Instruction** — a resizable monospace textarea for the user to author the AI's identity prompt. Saved independently with a `PUT /api/system-instruction` call carrying only `{ coreInstruction }`.
+
+2. **Dynamic Memory** — a toggle switch for `memoryEnabled` (saved immediately on toggle) and a resizable monospace textarea showing the AI's current memory. The user can manually edit and save the memory or clear it entirely (`DELETE /api/system-instruction/memory`). A character counter shows progress toward the 4,000-character limit. The `lastUpdated` timestamp from the server is displayed below this section.
+
+3. **Database Schema** — a read-only monospace textarea showing the AI's self-maintained table documentation. The user can clear it (`DELETE /api/system-instruction/db-schema`) but cannot edit it — the AI manages this content through the `update_db_schema` tool.
+
+Each save operation uses a shared `saveMutation` (`useMutation`). A `savedSection` state string tracks which section's save button should show the "Saved" confirmation icon (auto-cleared after 2 seconds).
+
 ### ModelManagerPage (`src/pages/ModelManagerPage.tsx`)
 
 Settings form for both providers. API keys are typed into local state (`geminiKey`, `openaiKey`) and submitted per-provider — they are never pre-populated from the server (the server returns masked values). Clearing the input and saving sends `apiKey: ""` which replaces the stored key.
@@ -154,7 +175,7 @@ Settings form for both providers. API keys are typed into local state (`geminiKe
 
 A thin `request<T>()` wrapper over `fetch`. All requests use `Content-Type: application/json` and throw an `Error` with the server's `error` field if the response is not `2xx`.
 
-The `api` object exposes typed methods for chats and settings:
+The `api` object exposes typed methods for chats, settings, and system instruction:
 
 ```typescript
 api.chats.list()                             // GET /api/chats
@@ -164,13 +185,26 @@ api.chats.patch(id, { title })               // PATCH /api/chats/:id
 api.chats.delete(id)                         // DELETE /api/chats/:id
 api.settings.get()                           // GET /api/settings
 api.settings.update(partial)                 // PUT /api/settings
+api.systemInstruction.get()                  // GET /api/system-instruction
+api.systemInstruction.update(partial)        // PUT /api/system-instruction
+api.systemInstruction.clearMemory()          // DELETE /api/system-instruction/memory
+api.systemInstruction.clearDbSchema()        // DELETE /api/system-instruction/db-schema
 ```
+
+`clearMemory()` and `clearDbSchema()` use raw `fetch` rather than the `request<T>()` helper because they return `204 No Content` (no JSON body to parse).
 
 `streamMessage(chatId, content, callbacks)` is exported separately (not on the `api` object) because it does not use the `request()` helper — it uses the streaming Fetch API directly. It returns an `AbortController`.
 
 ## Type definitions (`src/types/index.ts`)
 
 Frontend-only types. These are **not** imported from the backend package — they are maintained in parallel with the Drizzle schema. If the database schema changes, this file must be updated to match.
+
+Interfaces defined here:
+- `Chat` — chat session metadata
+- `Message` — a single chat message
+- `GeminiSettings` / `OpenAISettings` / `AppSettings` — provider settings shapes
+- `SystemInstruction` — the AI instruction/memory/schema config (mirrors `src/services/systemInstruction.ts`)
+- `Provider` — `'gemini' | 'openai'` union type alias
 
 The model lists (`GEMINI_MODELS`, `OPENAI_MODELS`, `GEMINI_IMAGE_MODELS`, `OPENAI_IMAGE_MODELS`) are defined here as `const` arrays with `{ id, label }` objects. These arrays are the source of truth for what models the UI knows about. Adding a new model requires editing this file and rebuilding — there is no dynamic model discovery from the API.
 

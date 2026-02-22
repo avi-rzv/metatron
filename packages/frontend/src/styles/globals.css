@@ -29,6 +29,17 @@
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-600;
   }
+
+  /* Thicker scrollbar for the chat messages area */
+  .chat-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  .chat-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
 }
 
 @layer utilities {

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { chatRoutes } from './routes/chats.js';
 import { settingsRoutes } from './routes/settings.js';
+import { systemInstructionRoutes } from './routes/systemInstruction.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -27,6 +28,7 @@ await fastify.register(cors, {
 // Routes
 await fastify.register(chatRoutes);
 await fastify.register(settingsRoutes);
+await fastify.register(systemInstructionRoutes);
 
 // Health check
 fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

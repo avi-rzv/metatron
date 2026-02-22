@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faComments,
   faSlidersH,
+  faBrain,
   faBars,
   faUser,
   faRightFromBracket,
@@ -13,6 +14,7 @@ import { t } from '@/i18n';
 
 const navItems = [
   { to: '/chat', icon: faComments, label: t.nav.chat },
+  { to: '/system-instruction', icon: faBrain, label: t.nav.systemInstruction },
   { to: '/models', icon: faSlidersH, label: t.nav.modelManager },
 ];
 

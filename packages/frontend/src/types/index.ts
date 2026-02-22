@@ -37,6 +37,14 @@ export interface AppSettings {
   openai: OpenAISettings;
 }
 
+export interface SystemInstruction {
+  coreInstruction: string;
+  memory: string;
+  memoryEnabled: boolean;
+  dbSchema: string;
+  updatedAt: string;
+}
+
 export type Provider = 'gemini' | 'openai';
 
 export const GEMINI_MODELS = [

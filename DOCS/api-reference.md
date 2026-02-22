@@ -128,12 +128,14 @@ Sends a user message and streams the LLM response using Server-Sent Events (SSE)
 
 This is the most complex endpoint. The connection lifecycle is:
 
-1. Client sends a POST with the user message content
+1. Client sends a POST with the user message content (and optional `provider`/`model` override)
 2. Server saves the user message to the database
 3. Server auto-titles the chat if this is the first message
-4. Server begins streaming from the LLM provider configured on the chat
-5. Server emits SSE events until the response is complete or an error occurs
-6. Server saves the complete assistant message to the database and closes the response
+4. Server loads the combined system prompt via `buildCombinedPrompt()` and, if `memoryEnabled` is true, creates AI tool callbacks
+5. Server begins streaming from the LLM provider configured on the chat (or the override provider)
+6. If the LLM invokes function calls (tools), the server executes them and feeds the results back to the model before continuing the stream
+7. Server emits SSE events until the response is complete or an error occurs
+8. Server saves the complete assistant message to the database and closes the response
 
 **Request body**
 ```json
@@ -169,6 +171,50 @@ All events use the named-event format: `event: <type>\ndata: <json>\n\n`.
 The client reads the response body as a `ReadableStream`, decodes it with `TextDecoder`, and splits on `\n`. Lines beginning with `event: ` set the current event type; lines beginning with `data: ` carry the JSON payload. The event type is reset after each `data` line is processed.
 
 The `streamMessage()` function in `src/api/index.ts` returns an `AbortController`. Call `controller.abort()` to cancel an in-progress stream — the backend will close the connection on the next write attempt.
+
+---
+
+## System Instruction
+
+The system instruction controls the AI's identity, persistent memory, and database access. All fields are stored as a single JSON blob in the `settings` table under the key `system_instruction`. See `DOCS/ai-tools.md` for the full internals.
+
+### GET /api/system-instruction
+
+Returns the current `SystemInstruction` object. If no instruction has been saved yet, returns the built-in defaults (the full Metatron identity prompt, empty memory, `memoryEnabled: true`, empty schema).
+
+**Response `200`** — `SystemInstruction` object
+
+---
+
+### PUT /api/system-instruction
+
+Shallow-merges the supplied partial object over the current instruction and persists it. `updatedAt` is always updated to the current time by the server regardless of what fields are sent.
+
+**Request body** — any subset of `SystemInstruction` fields
+```json
+{
+  "coreInstruction": "You are a helpful assistant.",
+  "memoryEnabled": false
+}
+```
+
+**Response `200`** — the full updated `SystemInstruction` object
+
+---
+
+### DELETE /api/system-instruction/memory
+
+Clears the memory field (sets it to `""`). Used by the System Instruction page "Clear" button in the memory section.
+
+**Response `204`** — no body
+
+---
+
+### DELETE /api/system-instruction/db-schema
+
+Clears the database schema documentation field (sets it to `""`). Used by the System Instruction page "Clear" button in the database schema section.
+
+**Response `204`** — no body
 
 ---
 
@@ -278,6 +324,17 @@ Updates settings. Send only the provider sub-object(s) you want to change. The s
 }
 ```
 
+### SystemInstruction
+```typescript
+{
+  coreInstruction: string;  // injected verbatim as the LLM system prompt
+  memory: string;           // AI-managed bullet-point facts; max 4,000 characters
+  memoryEnabled: boolean;   // when false, all three AI tools are disabled
+  dbSchema: string;         // AI-managed Markdown docs of ai_ tables
+  updatedAt: string;        // ISO 8601 timestamp, set server-side on every write
+}
+```
+
 ---
 
 ## Error responses
@@ -293,6 +350,6 @@ Fastify's default error serializer handles uncaught exceptions and produces `{ "
 
 ## Known limitations / TODOs
 
-- Static file serving for the built frontend is not yet configured in `src/index.ts` — `@fastify/static` is declared as a dependency but not registered. Production deployment requires either wiring this up or using a reverse proxy to serve `packages/frontend/dist/`.
 - There is no authentication layer. The system is designed for single-user, private network or VPN use — add an auth plugin (e.g., `@fastify/jwt`) before exposing to the public internet.
 - The WebSocket plugin (`@fastify/websocket`) is declared as a dependency but not yet used. It is reserved for future real-time features (PTY sessions, Pulse loop).
+- The SQL validator in `src/services/sqlValidator.ts` blocks protected table names by substring regex. It does not parse the SQL AST, so a sufficiently crafted query could theoretically bypass it. Because this is a single-user system where the AI is trusted, this is an accepted trade-off rather than a security boundary.

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faClockRotateLeft } from '@fortawesome/free-solid-svg-icons';
+import { faClockRotateLeft, faBars } from '@fortawesome/free-solid-svg-icons';
 import { ModelSelector } from '@/components/chat/ModelSelector';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -18,7 +18,7 @@ export function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { toggleRightPanel } = useUIStore();
+  const { toggleRightPanel, isMobile, toggleSidebar } = useUIStore();
   const { isStreaming, setStreaming, appendStreamChunk, stopStreaming } = useChatStore();
 
   // Default provider/model from settings if available
@@ -27,6 +27,20 @@ export function ChatPage() {
   const [provider, setProvider] = useState<Provider>('gemini');
   const [model, setModel] = useState<string>(GEMINI_MODELS[0].id);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
+
+  // Restore last visited chat when landing on /chat with no chatId
+  useEffect(() => {
+    if (!chatId) {
+      const lastId = localStorage.getItem('lastChatId');
+      if (lastId) navigate(`/chat/${lastId}`, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the last visited chatId
+  useEffect(() => {
+    if (chatId) localStorage.setItem('lastChatId', chatId);
+  }, [chatId]);
 
   // Only apply settings defaults once per new-chat session (not on every settings refetch)
   const settingsInitialized = useRef(false);
@@ -134,13 +148,51 @@ export function ChatPage() {
     });
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRestored = useRef(false);
+
+  // Reset restored flag whenever we switch to a different chat
+  useEffect(() => {
+    scrollRestored.current = false;
+  }, [chatId]);
+
+  // Save scroll position to sessionStorage as the user scrolls
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !chatId) return;
+    const onScroll = () => sessionStorage.setItem(`chat-scroll:${chatId}`, String(el.scrollTop));
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [chatId]);
+
+  // Once messages first load for this chatId, restore saved position (or jump to bottom)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || scrollRestored.current) return;
+    if (localMessages.length === 0) return;
+    scrollRestored.current = true;
+    const saved = chatId ? sessionStorage.getItem(`chat-scroll:${chatId}`) : null;
+    el.scrollTop = saved !== null ? Number(saved) : el.scrollHeight;
+  }, [localMessages, chatId]);
+
   const messages = localMessages;
 
   return (
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <ModelSelector provider={provider} model={model} onChange={handleModelChange} />
+        <div className="flex items-center gap-2">
+          {isMobile && (
+            <button
+              onClick={toggleSidebar}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-black active:scale-95 transition-all duration-150"
+              aria-label={t.sidebar.open}
+            >
+              <FontAwesomeIcon icon={faBars} className="text-sm" />
+            </button>
+          )}
+          <ModelSelector provider={provider} model={model} onChange={handleModelChange} />
+        </div>
         <button
           onClick={toggleRightPanel}
           className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-black active:scale-95 transition-all duration-150"
@@ -150,22 +202,24 @@ export function ChatPage() {
         </button>
       </div>
 
-      {/* Chat area — centered on desktop */}
-      <div className="flex flex-1 overflow-y-auto justify-center">
-        <div className="flex flex-1 flex-col w-full max-w-3xl">
+      {/* Scrollable messages area — full width so scrollbar sits at the far right */}
+      <div ref={scrollRef} className="flex flex-1 overflow-y-auto chat-scrollbar justify-center">
+        <div className="w-full max-w-3xl">
           {messages.length === 0 && !isStreaming ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center py-16">
               <p className="text-2xl font-semibold text-gray-800">{t.appName}</p>
               <p className="text-sm text-gray-400">{t.chat.startNewChat}</p>
             </div>
           ) : (
             <ChatWindow messages={messages} />
           )}
+        </div>
+      </div>
 
-          {/* Input */}
-          <div className="sticky bottom-0 bg-white px-4 pb-4 pt-2">
-            <ChatInput onSend={handleSend} disabled={isStreaming} />
-          </div>
+      {/* Input — outside the scroll container, always anchored at the bottom */}
+      <div className="flex justify-center bg-white px-4 pb-4 pt-2">
+        <div className="w-full max-w-3xl">
+          <ChatInput onSend={handleSend} disabled={isStreaming} />
         </div>
       </div>
 
