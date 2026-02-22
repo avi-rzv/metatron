@@ -1,31 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
- * Detects the virtual keyboard height on mobile using the Visual Viewport API.
+ * Returns the current visual viewport height (in px).
  *
- * Relies on `interactive-widget=resizes-visual` in the viewport meta tag
- * (Chrome Android) and Safari's default behavior (iOS) where
- * `window.innerHeight` stays constant while `visualViewport.height` shrinks
- * when the keyboard appears.
+ * On mobile, this shrinks when the virtual keyboard opens — by setting
+ * the chat container height to this value the input always sits right
+ * above the keyboard while the top bar stays pinned at the top.
+ *
+ * Updates are batched via requestAnimationFrame for smoothness.
  */
-export function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
+export function useVisualViewportHeight(): number | null {
+  const [height, setHeight] = useState<number | null>(null);
+  const rafRef = useRef(0);
 
   useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    // Set initial value
+    setHeight(Math.round(vv.height));
 
     const update = () => {
-      const diff = window.innerHeight - viewport.height;
-      setHeight(diff > 0 ? Math.round(diff) : 0);
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        setHeight(Math.round(vv.height));
+      });
     };
 
-    viewport.addEventListener('resize', update);
-    viewport.addEventListener('scroll', update);
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
 
     return () => {
-      viewport.removeEventListener('resize', update);
-      viewport.removeEventListener('scroll', update);
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      cancelAnimationFrame(rafRef.current);
     };
   }, []);
 

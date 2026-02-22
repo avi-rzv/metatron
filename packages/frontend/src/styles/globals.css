@@ -16,6 +16,16 @@
     @apply font-sans antialiased text-black bg-white;
   }
 
+  /* Lock the body on mobile to prevent iOS Safari from scrolling the
+     visual viewport when the keyboard opens — our JS handles the offset. */
+  @media (max-width: 767px) {
+    body {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+  }
+
   /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 4px;
