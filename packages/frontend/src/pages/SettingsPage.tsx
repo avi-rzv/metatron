@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api } from '@/api';
+import { PageTopBar } from '@/components/layout/PageTopBar';
 import { t } from '@/i18n';
 
 // Detect user's local timezone
@@ -112,13 +113,10 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="flex h-full overflow-y-auto">
+    <div className="flex h-full flex-col">
+      <PageTopBar title={t.settings.title} />
+      <div className="flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t.settings.title}</h1>
-          <p className="mt-1 text-sm text-gray-400">{t.settings.subtitle}</p>
-        </div>
 
         {/* Timezone Section */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-5">
@@ -171,6 +169,7 @@ export function SettingsPage() {
             {isSaving ? t.settings.saving : saved ? t.settings.saved : t.settings.save}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

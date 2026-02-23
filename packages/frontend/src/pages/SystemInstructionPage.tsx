@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faCheck } from '@fortawesome/free-solid-svg-icons';
 import { api } from '@/api';
+import { PageTopBar } from '@/components/layout/PageTopBar';
 import { t } from '@/i18n';
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -102,13 +103,10 @@ export function SystemInstructionPage() {
   }
 
   return (
-    <div className="flex h-full overflow-y-auto">
+    <div className="flex h-full flex-col">
+      <PageTopBar title={t.systemInstruction.title} />
+      <div className="flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t.systemInstruction.title}</h1>
-          <p className="mt-1 text-sm text-gray-400">{t.systemInstruction.subtitle}</p>
-        </div>
 
         {/* Core Instruction */}
         <Section
@@ -208,6 +206,7 @@ export function SystemInstructionPage() {
             </button>
           </div>
         </Section>
+      </div>
       </div>
     </div>
   );

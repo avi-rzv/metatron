@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faKey, faCheck, faSpinner, faEye, faEyeSlash, faXmark, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { api } from '@/api';
+import { PageTopBar } from '@/components/layout/PageTopBar';
 import { t } from '@/i18n';
 import { showToast } from '@/utils/toast';
 import {
@@ -365,13 +366,10 @@ export function ModelManagerPage() {
   }
 
   return (
-    <div className="flex h-full overflow-y-auto">
+    <div className="flex h-full flex-col">
+      <PageTopBar title={t.modelManager.title} />
+      <div className="flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t.modelManager.title}</h1>
-          <p className="mt-1 text-sm text-gray-400">{t.modelManager.subtitle}</p>
-        </div>
 
         {/* Model Defaults */}
         <Section title={t.modelManager.modelDefaults}>
@@ -503,6 +501,7 @@ export function ModelManagerPage() {
           {saved && !isSaving && <FontAwesomeIcon icon={faCheck} className="text-xs" />}
           {isSaving ? t.modelManager.saving : saved ? t.modelManager.saved : t.modelManager.save}
         </button>
+      </div>
       </div>
     </div>
   );

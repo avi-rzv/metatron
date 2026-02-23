@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api, getMediaUrl } from '@/api';
 import { ImageLightbox } from '@/components/chat/ImageLightbox';
+import { PageTopBar } from '@/components/layout/PageTopBar';
 import { t } from '@/i18n';
 import type { Media } from '@/types';
 
@@ -34,10 +35,7 @@ export function GalleryPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="border-b border-gray-100 px-6 py-4">
-        <h1 className="text-lg font-semibold text-gray-900">{t.gallery.title}</h1>
-      </div>
+      <PageTopBar title={t.gallery.title} />
 
       {/* Gallery grid */}
       <div className="flex-1 overflow-y-auto p-6">

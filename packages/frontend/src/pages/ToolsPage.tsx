@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faSearch, faKey, faPen, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api } from '@/api';
+import { PageTopBar } from '@/components/layout/PageTopBar';
 import { t } from '@/i18n';
 
 export function ToolsPage() {
@@ -75,13 +76,10 @@ export function ToolsPage() {
   }
 
   return (
-    <div className="flex h-full overflow-y-auto">
+    <div className="flex h-full flex-col">
+      <PageTopBar title={t.tools.title} />
+      <div className="flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t.tools.title}</h1>
-          <p className="mt-1 text-sm text-gray-400">{t.tools.subtitle}</p>
-        </div>
 
         {/* Brave Search Card */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
@@ -215,6 +213,7 @@ export function ToolsPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
