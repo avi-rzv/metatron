@@ -78,7 +78,7 @@ export function SettingsPage() {
   const [pulseEnabled, setPulseEnabled] = useState(false);
   const [pulsesPerDay, setPulsesPerDay] = useState<PulseInterval>(12);
   const [activeDays, setActiveDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [quietHours, setQuietHours] = useState<QuietHoursRange[]>([{ start: '23:00', end: '07:00' }]);
+  const [quietHours, setQuietHours] = useState<QuietHoursRange[]>([]);
   const [pulseSaved, setPulseSaved] = useState(false);
 
   useEffect(() => {
@@ -92,7 +92,7 @@ export function SettingsPage() {
       setPulseEnabled(settings.pulse.enabled);
       setPulsesPerDay(settings.pulse.pulsesPerDay);
       setActiveDays(settings.pulse.activeDays);
-      setQuietHours(settings.pulse.quietHours.length > 0 ? settings.pulse.quietHours : [{ start: '23:00', end: '07:00' }]);
+      setQuietHours(settings.pulse.quietHours);
     }
   }, [settings]);
 
@@ -333,14 +333,12 @@ export function SettingsPage() {
                     onChange={(e) => updateQuietHour(idx, 'end', e.target.value)}
                     className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-gray-400"
                   />
-                  {quietHours.length > 1 && (
-                    <button
-                      onClick={() => removeQuietHourRange(idx)}
-                      className="text-gray-300 hover:text-red-400 transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faTrash} className="text-xs" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => removeQuietHourRange(idx)}
+                    className="text-gray-300 hover:text-red-400 transition-colors"
+                  >
+                    <FontAwesomeIcon icon={faTrash} className="text-xs" />
+                  </button>
                 </div>
               ))}
               <button

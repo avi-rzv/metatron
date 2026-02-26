@@ -61,7 +61,7 @@ const DEFAULTS: AppSettings = {
     enabled: false,
     activeDays: [0, 1, 2, 3, 4, 5, 6],
     pulsesPerDay: 12 as PulseInterval,
-    quietHours: [{ start: '23:00', end: '07:00' }],
+    quietHours: [],
     chatId: null,
     notes: '',
     lastPulseAt: null,
