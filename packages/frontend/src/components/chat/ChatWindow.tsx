@@ -10,7 +10,17 @@ interface ChatWindowProps {
 export function ChatWindow({ messages }: ChatWindowProps) {
   const { isStreaming, streamingContent, streamingCitations, streamingMedia } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const prevMessageCount = useRef(messages.length);
 
+  // Smooth-scroll to bottom when a new message is added (user sends)
+  useEffect(() => {
+    if (messages.length > prevMessageCount.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessageCount.current = messages.length;
+  }, [messages.length]);
+
+  // Keep pinned to bottom during streaming (instant to avoid lag)
   useEffect(() => {
     if (isStreaming) {
       bottomRef.current?.scrollIntoView({ behavior: 'instant' });

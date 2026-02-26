@@ -38,7 +38,7 @@ apt update && apt upgrade -y
 
 ### Step 3 — Install Required System Packages
 
-MetatronOS uses native Node.js addons (`better-sqlite3`, `node-pty`) that require a C/C++ compiler and Python. Install all build tools upfront:
+MetatronOS requires build tools for native Node.js addons (`node-pty`) and MongoDB as the database. Install all system packages upfront:
 
 ```bash
 apt install -y \
@@ -49,6 +49,7 @@ apt install -y \
   python3 \
   python3-pip \
   pkg-config \
+  gnupg \
   nginx \
   ufw
 ```
@@ -59,15 +60,50 @@ apt install -y \
 |---------|---------|
 | `git` | Clone the repo and pull updates |
 | `curl` / `wget` | Download installers |
-| `build-essential` | C/C++ compiler (`gcc`, `g++`, `make`) — required to compile `better-sqlite3` and `node-pty` native binaries |
+| `build-essential` | C/C++ compiler (`gcc`, `g++`, `make`) — required to compile `node-pty` native binaries |
 | `python3` | Required by `node-gyp` (native addon build tool) |
 | `pkg-config` | Helps `node-gyp` locate system libraries |
+| `gnupg` | Required for adding the MongoDB APT repository key |
 | `nginx` | Reverse proxy — forwards HTTPS traffic to the Node.js backend |
 | `ufw` | Firewall to restrict open ports |
 
 ---
 
-### Step 4 — Install Node.js 20 LTS
+### Step 4 — Install MongoDB
+
+Install MongoDB Community Edition 8.0 from the official repository:
+
+```bash
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
+  gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+
+echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | \
+  tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+
+apt update
+apt install -y mongodb-org
+```
+
+Start MongoDB and enable it to start on boot:
+
+```bash
+systemctl start mongod
+systemctl enable mongod
+```
+
+Verify it is running:
+
+```bash
+mongosh --eval "db.runCommand({ ping: 1 })"
+```
+
+You should see `{ ok: 1 }`.
+
+MongoDB stores data at `/var/lib/mongodb` by default. No additional configuration is needed — MetatronOS connects to `mongodb://127.0.0.1:27017` out of the box.
+
+---
+
+### Step 5 — Install Node.js 20 LTS
 
 The project requires **Node.js 20 LTS**. Use the official NodeSource setup script:
 
@@ -85,7 +121,7 @@ npm --version    # should print 10.x.x or similar
 
 ---
 
-### Step 5 — Install PM2 (Process Manager)
+### Step 6 — Install PM2 (Process Manager)
 
 PM2 keeps the Node.js backend running in the background, restarts it on crashes, and auto-starts it on server reboots:
 
@@ -95,7 +131,7 @@ npm install -g pm2
 
 ---
 
-### Step 6 — Configure the Firewall
+### Step 7 — Configure the Firewall
 
 Allow only the ports we actually need:
 
@@ -114,7 +150,7 @@ ufw status
 
 ---
 
-### Step 7 — Create a Dedicated App User (Recommended)
+### Step 8 — Create a Dedicated App User (Recommended)
 
 Running the app as root is a security risk. Create a non-root user:
 
@@ -131,7 +167,7 @@ su - metatron
 
 ---
 
-### Step 8 — Set Up SSH Key for GitHub Access
+### Step 9 — Set Up SSH Key for GitHub Access
 
 This allows the server to pull from the private GitHub repo without a password.
 
@@ -178,7 +214,7 @@ You should see: `Hi avi-rzv! You've successfully authenticated...`
 
 ---
 
-### Step 9 — Clone the Repository
+### Step 10 — Clone the Repository
 
 ```bash
 mkdir -p /home/metatron/apps
@@ -189,7 +225,7 @@ cd metatron
 
 ---
 
-### Step 10 — Install Node.js Dependencies
+### Step 11 — Install Node.js Dependencies
 
 Install all workspace dependencies from the monorepo root:
 
@@ -197,11 +233,11 @@ Install all workspace dependencies from the monorepo root:
 npm install
 ```
 
-This installs dependencies for both `packages/backend` and `packages/frontend`. The native addons (`better-sqlite3`, `node-pty`) will be compiled here — this may take a minute.
+This installs dependencies for both `packages/backend` and `packages/frontend`. The `node-pty` native addon will be compiled here — this may take a minute.
 
 ---
 
-### Step 11 — Create the Production Environment File
+### Step 12 — Create the Production Environment File
 
 The backend reads its configuration from a `.env` file in the `packages/backend` directory. This file is **not** committed to git and must be created manually on the server.
 
@@ -215,7 +251,8 @@ Paste the following, replacing placeholder values:
 ```env
 PORT=4000
 HOST=127.0.0.1
-DATABASE_URL=./data/metatron.db
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DB=metatron
 ENCRYPTION_SECRET=a18a8fe2a0692752d5ee76f906070bee21be593ea1d6d0de2574c5a6b6578a170441fedeec82a9cfa59193d63fb11e7c
 FRONTEND_ORIGIN=https://76.13.147.50
 NODE_ENV=production
@@ -231,7 +268,7 @@ Save and close: `Ctrl+X`, then `Y`, then `Enter`.
 
 ---
 
-### Step 12 — Build the Project
+### Step 13 — Build the Project
 
 Build the frontend (React → static files) and the backend (TypeScript → JavaScript):
 
@@ -245,42 +282,27 @@ This runs:
 
 ---
 
-### Step 13 — Initialize the Database
+### Step 14 — Verify MongoDB is Running
 
-> **First-time setup note:** `db:migrate` requires pre-generated migration files committed to the repo (`packages/backend/drizzle/`). If those files are not yet in git, use `db:push` instead — it applies the schema directly to a fresh database without needing them.
+MongoDB should already be running from Step 4. Verify:
 
-**Option A — migration files exist in git (standard, use this going forward):**
+```bash
+systemctl status mongod
+```
+
+No manual database initialization is needed — MongoDB creates collections and indexes automatically when the backend starts. If you are migrating from an older SQLite-based installation, run the migration script:
 
 ```bash
 cd /home/metatron/apps/metatron/packages/backend
-npm run db:migrate
+npm run migrate:sqlite-to-mongo
 cd /home/metatron/apps/metatron
 ```
 
-**Option B — migration files are missing (first deploy workaround):**
-
-```bash
-cd /home/metatron/apps/metatron/packages/backend
-npm run db:push
-cd /home/metatron/apps/metatron
-```
-
-Either command creates the `data/metatron.db` file with all required tables.
-
-> **After using Option B**, generate and commit the migration files from your local machine so future deploys can use `db:migrate`:
-> ```bash
-> # On your local machine:
-> cd packages/backend
-> npm run db:generate
-> cd ../..
-> git add packages/backend/drizzle/
-> git commit -m "chore: add initial drizzle migration files"
-> git push origin master
-> ```
+This reads data from the old `data/metatron.db` file and inserts it into MongoDB. It is safe to run multiple times.
 
 ---
 
-### Step 14 — Start the Backend with PM2
+### Step 15 — Start the Backend with PM2
 
 Launch the backend and configure PM2 to manage it:
 
@@ -314,7 +336,7 @@ The logs should show the Fastify server listening on port 4000 with no errors.
 
 ---
 
-### Step 15 — Configure Nginx as Reverse Proxy
+### Step 16 — Configure Nginx as Reverse Proxy
 
 Nginx sits in front of the Node.js backend. It handles HTTPS termination and forwards requests to port 4000.
 
@@ -380,7 +402,7 @@ sudo systemctl reload nginx
 
 ---
 
-### Step 16 — Install SSL Certificate (HTTPS)
+### Step 17 — Install SSL Certificate (HTTPS)
 
 > **Note:** SSL via Let's Certbot requires a **domain name** pointing to this IP. If you are using only an IP address, skip this step for now and set up a domain first. Once you have a domain, follow the steps below.
 
@@ -423,10 +445,10 @@ pm2 restart metatron
 
 The server is now running MetatronOS. Summary of what is deployed:
 
+- **MongoDB** runs on localhost:27017, stores data in `/var/lib/mongodb`
 - **PM2** manages the Node.js backend (`packages/backend/dist/index.js`) on port 4000
 - **Nginx** proxies all traffic on port 80/443 to the backend
 - **The backend** serves the built React frontend as static files from `packages/frontend/dist/`
-- **SQLite** database is stored at `packages/backend/data/metatron.db`
 
 ---
 
@@ -523,19 +545,7 @@ npm install
 
 If no `package.json` files changed, you can skip this step. When in doubt, run it anyway — it is safe and idempotent.
 
-#### Step 3 — Run Database Migrations (if schema changed)
-
-If you added, removed, or modified database tables (i.e., changed `packages/backend/src/db/schema.ts`):
-
-```bash
-cd packages/backend
-npm run db:migrate
-cd /home/metatron/apps/metatron
-```
-
-If the database schema did not change, skip this step.
-
-#### Step 4 — Rebuild the Project
+#### Step 3 — Rebuild the Project
 
 Always rebuild after pulling — even small TypeScript or frontend changes require a rebuild:
 
@@ -545,7 +555,7 @@ npm run build
 
 This recompiles the TypeScript backend and re-bundles the React frontend.
 
-#### Step 5 — Restart the Backend
+#### Step 4 — Restart the Backend
 
 Apply the new build by restarting the PM2 process:
 
@@ -562,7 +572,7 @@ pm2 logs metatron --lines 50
 
 Look for the Fastify startup message. If you see errors, check the logs carefully — a missing environment variable or failed database migration is the most common cause.
 
-#### Step 6 — Verify in the Browser
+#### Step 5 — Verify in the Browser
 
 Open `http://76.13.147.50` (or your domain) and confirm the update is live and working.
 
@@ -576,7 +586,6 @@ After SSHing into the server, run these commands in order:
 cd /home/metatron/apps/metatron
 git pull origin master
 npm install
-cd packages/backend && npm run db:migrate && cd /home/metatron/apps/metatron
 npm run build
 pm2 restart metatron
 pm2 logs metatron --lines 30
@@ -592,7 +601,7 @@ pm2 logs metatron --lines 100
 ```
 Read the error message carefully. Common causes:
 - Missing or incorrect `.env` value
-- Database migration not run after schema change
+- MongoDB not running (`systemctl status mongod`)
 - Build failed (check `npm run build` output)
 
 **Nginx returns 502 Bad Gateway:**
@@ -606,10 +615,17 @@ pm2 restart metatron
 The firewall should only expose 80 and 443. Port 4000 is internal — traffic goes through Nginx. This is expected.
 
 **`git pull` asks for a password:**
-The SSH key is not set up correctly. Re-check Step 8.
+The SSH key is not set up correctly. Re-check Step 9.
 
 **`npm install` fails on native addons:**
 `build-essential` and `python3` must be installed. Re-check Step 3:
 ```bash
 sudo apt install -y build-essential python3
+```
+
+**MongoDB connection refused:**
+MongoDB may not be running or may not have started on boot:
+```bash
+sudo systemctl start mongod
+sudo systemctl enable mongod
 ```

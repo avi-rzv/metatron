@@ -26,6 +26,10 @@ All routes are nested under the `<Layout>` component, which renders `<SidePanel>
 /chat/:chatId          → ChatPage (loads and displays a specific chat)
 /system-instruction    → SystemInstructionPage
 /models                → ModelManagerPage
+/tools                 → ToolsPage (Brave Search + WhatsApp connection + permissions)
+/schedule              → SchedulePage (recurring AI task management)
+/gallery               → GalleryPage
+/settings              → SettingsPage
 ```
 
 Routes are defined in `src/App.tsx`. The `<Layout>` route wrapper handles the media-query listener that drives the mobile/desktop sidebar behaviour.
@@ -77,6 +81,9 @@ Cache keys in use:
 | `['chat', chatId]` | `Chat & { messages }` — single chat with history | After stream `done` |
 | `['settings']` | `AppSettings` | Settings save mutations |
 | `['system-instruction']` | `SystemInstruction` | Save and clear mutations in `SystemInstructionPage` |
+| `['cronjobs']` | `CronJob[]` — all cronjobs | Create, update, delete, and toggle mutations in `SchedulePage` |
+| `['whatsapp-status']` | `{ status, phoneNumber }` | After connect and disconnect in `ToolsPage`; also polled every 10 seconds |
+| `['whatsapp-permissions']` | `WhatsAppPermission[]` | Create, update, and delete mutations in `WhatsAppPermissionsModal` |
 
 ## Component tree
 
@@ -90,7 +97,11 @@ App
                 ├── Route (/chat)                  → ChatPage
                 ├── Route (/chat/:id)              → ChatPage
                 ├── Route (/system-instruction)    → SystemInstructionPage
-                └── Route (/models)                → ModelManagerPage
+                ├── Route (/models)                → ModelManagerPage
+                ├── Route (/tools)                 → ToolsPage
+                ├── Route (/schedule)              → SchedulePage
+                ├── Route (/gallery)               → GalleryPage
+                └── Route (/settings)              → SettingsPage
 ```
 
 ### Layout (`src/components/layout/Layout.tsx`)
@@ -111,8 +122,13 @@ Nav items are defined as a static array at module scope. Each item uses React Ro
 | Route | Icon | Label |
 |-------|------|-------|
 | `/chat` | `faComments` | Chat |
-| `/system-instruction` | `faBrain` | System Instruction |
+| `/gallery` | `faImages` | Gallery |
 | `/models` | `faSlidersH` | Model Manager |
+| `/tools` | `faToolbox` | Tools |
+| `/schedule` | `faClock` | Schedule |
+| `/system-instruction` | `faBrain` | Memory |
+
+A Settings link (`faGear`, `/settings`) is rendered separately at the bottom of the nav area, above the footer. There is no longer a dedicated WhatsApp nav item — WhatsApp is accessible through the Tools page.
 
 ### ChatPage (`src/pages/ChatPage.tsx`)
 
@@ -171,6 +187,61 @@ Settings form for both providers. API keys are typed into local state (`geminiKe
 
 `hasApiKey` from the settings response is used only to display the "Key stored securely" badge — not to control form state.
 
+### SchedulePage (`src/pages/SchedulePage.tsx`)
+
+Full CRUD page for managing recurring AI tasks (cronjobs). Lists all cronjobs as cards, each showing the name, a human-readable cron description (via a `cronToHuman()` utility), the raw cron expression, an enable/disable toggle switch, the last run timestamp, and action buttons (View Chat, Edit, Delete).
+
+- **Add/Edit modal** — shared form for creating and editing cronjobs. Includes name, instruction (textarea), cron expression (with live human-readable preview), and preset buttons for common schedules (daily 9 PM, daily 9 AM, weekdays 9 AM, every hour, Monday 9 AM).
+- **Delete confirmation** — inline dialog before deleting a cronjob and its dedicated chat.
+- **View Chat** — navigates to `/chat/{chatId}` to see execution results.
+- TanStack Query cache key: `['cronjobs']`.
+
+### ToolsPage (`src/pages/ToolsPage.tsx`)
+
+Hosts configuration for external integrations. Currently contains two cards: Brave Search and WhatsApp.
+
+**Brave Search card** — toggle switch enables/disables the tool. When no key is stored, toggling opens a modal for key entry. When a key is stored, edit and remove actions are available. The modal calls `PUT /api/settings` with `{ tools: { braveSearch: { enabled, apiKey } } }`.
+
+**WhatsApp card** — manages the WhatsApp Web connection lifecycle. Displays the connection status badge, QR code (when scanning is required), linked phone number (when connected), and disconnect/permissions controls. The page uses two data sources in priority order:
+
+1. **SSE stream** (`streamWhatsAppQR`) — real-time updates during an active connect flow; sets `streamStatus` and `streamPhone` local state
+2. **TanStack Query poll** (`queryKey: ['whatsapp-status']`, `refetchInterval: 10_000`) — background polling
+
+The effective `status` is `streamStatus ?? waStatusData?.status ?? 'disconnected'`.
+
+During a connect flow, after `POST /api/whatsapp/connect` returns, the SSE stream is opened. The QR image (256×256 `<img>`) is shown when `status === 'qr_ready'`. When the `connected` event fires, the stream is closed and the phone number is displayed.
+
+When connected, a "Manage Permissions" button opens `<WhatsAppPermissionsModal>`.
+
+Disconnecting opens an inline confirmation dialog with an optional "Clear saved session" checkbox, which calls `POST /api/whatsapp/disconnect`.
+
+The SSE `AbortController` is stored in a `useRef` and is aborted on unmount and on successful connection.
+
+### WhatsAppPermissionsModal (`src/components/whatsapp/WhatsAppPermissionsModal.tsx`)
+
+Full-screen overlay modal opened from `ToolsPage` when WhatsApp is connected. Manages the `whatsapp_permissions` collection via the `api.whatsapp.permissions` methods. TanStack Query cache key: `['whatsapp-permissions']`.
+
+- Renders a scrollable list of all permission records, each showing `displayName`, `phoneNumber`, and toggle switches for `canRead` and `canReply`
+- Provides an inline add form (phone + display name inputs); new records are created with both flags defaulting to `false`
+- Each toggle switch calls `api.whatsapp.permissions.update(id, { canRead | canReply })` immediately on click
+- Deleting a record requires a confirmation step within the modal
+
+### SettingsPage (`src/pages/SettingsPage.tsx`)
+
+Two configuration cards:
+
+**Timezone card** — searchable dropdown of all IANA timezones with computed UTC offsets. The user's detected timezone is listed first. Saves via `PUT /api/settings` with `{ timezone }`.
+
+**Pulse card** — configures the autonomous heartbeat system:
+- **Enable/disable toggle** — simple on/off switch
+- **Pulse interval selector** — five preset buttons: every 30 min (48/day), hourly (24/day), every 2 hours (12/day, recommended), every 4 hours (6/day), every 12 hours (2/day)
+- **Weekday selector** — seven circular day buttons (S M T W T F S); black when active, gray when inactive
+- **Quiet hours** — time input pairs (start→end) with add/remove; default: 23:00→07:00
+- **Status info** (read-only) — last pulse time, pulses today count
+- **View Pulse Chat button** — navigates to `/chat/{chatId}` if a pulse chat exists
+
+Saves via `PUT /api/settings` with `{ pulse: { ... } }`. Uses a separate `useMutation` from the timezone save so each section operates independently.
+
 ## API client (`src/api/index.ts`)
 
 A thin `request<T>()` wrapper over `fetch`. All requests use `Content-Type: application/json` and throw an `Error` with the server's `error` field if the response is not `2xx`.
@@ -189,21 +260,40 @@ api.systemInstruction.get()                  // GET /api/system-instruction
 api.systemInstruction.update(partial)        // PUT /api/system-instruction
 api.systemInstruction.clearMemory()          // DELETE /api/system-instruction/memory
 api.systemInstruction.clearDbSchema()        // DELETE /api/system-instruction/db-schema
+api.whatsapp.status()                        // GET /api/whatsapp/status
+api.whatsapp.connect()                       // POST /api/whatsapp/connect
+api.whatsapp.disconnect(clearSession)        // POST /api/whatsapp/disconnect
+api.whatsapp.messages(contact?, limit?)      // GET /api/whatsapp/messages
+api.whatsapp.permissions.list()              // GET /api/whatsapp/permissions
+api.whatsapp.permissions.create(data)        // POST /api/whatsapp/permissions
+api.whatsapp.permissions.update(id, data)    // PATCH /api/whatsapp/permissions/:id
+api.whatsapp.permissions.delete(id)          // DELETE /api/whatsapp/permissions/:id
+api.cronjobs.list()                          // GET /api/cronjobs
+api.cronjobs.create(data)                    // POST /api/cronjobs
+api.cronjobs.update(id, data)                // PATCH /api/cronjobs/:id
+api.cronjobs.delete(id)                      // DELETE /api/cronjobs/:id
+api.cronjobs.toggle(id)                      // POST /api/cronjobs/:id/toggle
 ```
 
 `clearMemory()` and `clearDbSchema()` use raw `fetch` rather than the `request<T>()` helper because they return `204 No Content` (no JSON body to parse).
 
 `streamMessage(chatId, content, callbacks)` is exported separately (not on the `api` object) because it does not use the `request()` helper — it uses the streaming Fetch API directly. It returns an `AbortController`.
 
+`streamWhatsAppQR(callbacks)` is also exported separately. It opens the `GET /api/whatsapp/qr/stream` SSE connection and dispatches `onQr`, `onStatus`, `onConnected`, `onClose`, and `onError` callbacks. It returns an `AbortController`. See `DOCS/whatsapp.md` for the full callback signatures.
+
 ## Type definitions (`src/types/index.ts`)
 
-Frontend-only types. These are **not** imported from the backend package — they are maintained in parallel with the Drizzle schema. If the database schema changes, this file must be updated to match.
+Frontend-only types. These are **not** imported from the backend package — they are maintained in parallel with the MongoDB document interfaces in `packages/backend/src/db/schema.ts`. If the database schema changes, this file must be updated to match.
 
 Interfaces defined here:
 - `Chat` — chat session metadata
 - `Message` — a single chat message
 - `GeminiSettings` / `OpenAISettings` / `AppSettings` — provider settings shapes
 - `SystemInstruction` — the AI instruction/memory/schema config (mirrors `src/services/systemInstruction.ts`)
+- `CronJob` — recurring task with cron expression, dedicated chat, and scheduling metadata
+- `QuietHoursRange` — `{ start: string, end: string }` in "HH:mm" format
+- `PulseInterval` — `48 | 24 | 12 | 6 | 2` union type
+- `PulseSettings` — pulse heartbeat configuration (enabled, activeDays, pulsesPerDay, quietHours, chatId, notes, tracking fields)
 - `Provider` — `'gemini' | 'openai'` union type alias
 
 The model lists (`GEMINI_MODELS`, `OPENAI_MODELS`, `GEMINI_IMAGE_MODELS`, `OPENAI_IMAGE_MODELS`) are defined here as `const` arrays with `{ id, label }` objects. These arrays are the source of truth for what models the UI knows about. Adding a new model requires editing this file and rebuilding — there is no dynamic model discovery from the API.

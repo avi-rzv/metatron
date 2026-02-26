@@ -6,6 +6,8 @@ import { ModelManagerPage } from '@/pages/ModelManagerPage';
 import { SystemInstructionPage } from '@/pages/SystemInstructionPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ToolsPage } from '@/pages/ToolsPage';
+import { SchedulePage } from '@/pages/SchedulePage';
+
 import { GalleryPage } from '@/pages/GalleryPage';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 
@@ -30,6 +32,7 @@ export default function App() {
             <Route path="/system-instruction" element={<SystemInstructionPage />} />
             <Route path="/models" element={<ModelManagerPage />} />
             <Route path="/tools" element={<ToolsPage />} />
+            <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/gallery" element={<GalleryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

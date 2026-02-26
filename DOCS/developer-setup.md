@@ -8,7 +8,7 @@ This guide gets a developer running MetatronOS locally. The target environment i
 - npm 10+ (ships with Node 20)
 - Git
 
-No database daemon, no Redis, no Docker required for local development.
+MongoDB must be running locally (see below). No Redis, no Docker required for local development.
 
 ## Repository layout
 
@@ -22,22 +22,29 @@ metatron/                        ← npm workspace root
 │   │   ├── src/
 │   │   │   ├── index.ts         ← server entry point
 │   │   │   ├── db/
-│   │   │   │   ├── schema.ts    ← Drizzle schema + inferred TypeScript types
-│   │   │   │   └── index.ts     ← DB connection, WAL pragma, bootstrap DDL
+│   │   │   │   ├── schema.ts    ← MongoDB document interfaces (TypeScript)
+│   │   │   │   ├── index.ts     ← MongoDB connection, collection accessors, indexes
+│   │   │   │   ├── utils.ts     ← toApiDoc/toApiDocs (_id → id mapping)
+│   │   │   │   └── cascade.ts   ← cascading delete helpers (deleteChat, deleteMessage)
 │   │   │   ├── routes/
 │   │   │   │   ├── chats.ts              ← CRUD + SSE streaming endpoint
 │   │   │   │   ├── settings.ts           ← GET/PUT /api/settings
-│   │   │   │   └── systemInstruction.ts  ← GET/PUT/DELETE /api/system-instruction
-│   │   │   └── services/
-│   │   │       ├── encryption.ts         ← AES-256-GCM helpers
-│   │   │       ├── settings.ts           ← AppSettings read/write/decrypt
-│   │   │       ├── systemInstruction.ts  ← system prompt + memory + db schema
-│   │   │       ├── aiTools.ts            ← save_memory / db_query / update_db_schema callbacks
-│   │   │       ├── sqlValidator.ts       ← blocks protected tables from AI SQL
-│   │   │       └── llm/
-│   │   │           ├── gemini.ts         ← @google/genai streaming + function-calling
-│   │   │           └── openai.ts         ← openai streaming + runTools
-│   │   ├── drizzle.config.ts    ← drizzle-kit config (schema path, dialect, db url)
+│   │   │   │   ├── media.ts              ← media file serving + deletion
+│   │   │   │   ├── uploads.ts            ← attachment file serving + deletion
+│   │   │   │   ├── systemInstruction.ts  ← GET/PUT/DELETE /api/system-instruction
+│   │   │   │   └── cronjobs.ts           ← CRUD + toggle for /api/cronjobs
+│   │   │   ├── services/
+│   │   │   │   ├── encryption.ts         ← AES-256-GCM helpers
+│   │   │   │   ├── settings.ts           ← AppSettings read/write/decrypt
+│   │   │   │   ├── systemInstruction.ts  ← system prompt + memory + db schema
+│   │   │   │   ├── aiTools.ts            ← save_memory / db_query / update_db_schema / manage_cronjob callbacks
+│   │   │   │   ├── cronService.ts        ← node-cron scheduling, CRUD, serial execution queue
+│   │   │   │   ├── mongoValidator.ts     ← validates + executes AI MongoDB operations
+│   │   │   │   └── llm/
+│   │   │   │       ├── gemini.ts         ← @google/genai streaming + function-calling
+│   │   │   │       └── openai.ts         ← openai streaming + runTools
+│   │   │   └── scripts/
+│   │   │       └── migrate-sqlite-to-mongo.ts  ← one-time SQLite→MongoDB migration
 │   │   ├── tsconfig.json        ← extends tsconfig.base; NodeNext module resolution
 │   │   └── package.json
 │   └── frontend/                ← React 18 SPA (Vite, Tailwind)
@@ -58,7 +65,8 @@ metatron/                        ← npm workspace root
 │       │   ├── pages/
 │       │   │   ├── ChatPage.tsx              ← main chat UI with SSE integration
 │       │   │   ├── SystemInstructionPage.tsx ← AI identity / memory / db schema editor
-│       │   │   └── ModelManagerPage.tsx      ← API key + model/thinking/image pickers
+│       │   │   ├── ModelManagerPage.tsx      ← API key + model/thinking/image pickers
+│       │   │   └── SchedulePage.tsx          ← cronjob CRUD (create, edit, toggle, delete)
 │       │   └── styles/globals.css
 │       ├── vite.config.ts       ← dev proxy /api → :4000, chunking strategy
 │       ├── tailwind.config.ts   ← custom fonts, animations (fade-in, slide-in)
@@ -107,26 +115,25 @@ All variables are backend-only. Set them in `packages/backend/.env`.
 |---|---|---|
 | `PORT` | `4000` | Fastify listen port |
 | `HOST` | `0.0.0.0` | Fastify bind address |
-| `DATABASE_URL` | `./data/metatron.db` | Path to the SQLite file, resolved relative to the backend working directory |
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017` | MongoDB connection string |
+| `MONGODB_DB` | `metatron` | MongoDB database name |
 | `ENCRYPTION_SECRET` | `metatron-dev-secret-change-in-production` | Passphrase used by scrypt to derive the AES-256-GCM key. **Change this before storing any real API keys.** |
 | `FRONTEND_ORIGIN` | `http://localhost:3000` | Allowed CORS origin — must exactly match the browser origin in production |
 | `NODE_ENV` | `development` | Controls Fastify logger format: `development` uses pretty-print; anything else uses JSON |
 
 ## Database
 
-The database is created automatically when the backend starts. There are no migration files to run on first boot — the backend executes bootstrap DDL (`CREATE TABLE IF NOT EXISTS`) on every startup via `src/db/index.ts`.
+MongoDB must be running locally before starting the backend. Install MongoDB Community Edition for your OS:
 
-The SQLite file is written to the path in `DATABASE_URL`. The parent directory is created automatically if it does not exist.
+- **Windows**: [MongoDB Community Server MSI](https://www.mongodb.com/try/download/community) — install as a Windows service
+- **macOS**: `brew install mongodb-community` and `brew services start mongodb-community`
+- **Linux**: follow the [official installation guide](https://www.mongodb.com/docs/manual/installation/)
 
-**Drizzle-kit commands** (run from `packages/backend/`):
+Collections and indexes are created automatically when the backend starts — no manual database initialization is needed.
 
-```bash
-npm run db:generate   # generates SQL migration files into packages/backend/drizzle/
-npm run db:migrate    # applies pending migrations
-npm run db:push       # pushes schema directly to the DB without migration files (dev shortcut)
-```
+The backend connects to `MONGODB_URI` (default: `mongodb://127.0.0.1:27017`) and uses the database specified by `MONGODB_DB` (default: `metatron`).
 
-The `db:push` shortcut is convenient during local schema iteration. Use `db:generate` + `db:migrate` for production deployments.
+See `DOCS/database.md` for full details on the schema, indexes, and query patterns.
 
 ## Building for production
 
@@ -158,7 +165,7 @@ The workspace uses two levels of TypeScript config:
 
 1. Create `packages/backend/src/routes/your-route.ts` that exports an `async function yourRoutes(fastify: FastifyInstance)`.
 2. Register it in `packages/backend/src/index.ts` with `await fastify.register(yourRoutes)`.
-3. Use Drizzle query helpers (`db.select().from(table).all()` etc.) — the `db` instance is exported from `src/db/index.ts`.
+3. Import typed collection accessors from `src/db/index.js` (e.g., `chatsCol`, `messagesCol`) and use the MongoDB native driver API. Use `toApiDoc()`/`toApiDocs()` from `src/db/utils.js` to map `_id` to `id` before returning documents.
 
 ## Adding a new frontend page
 

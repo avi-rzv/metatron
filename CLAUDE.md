@@ -12,7 +12,7 @@ Single-container monorepo with TypeScript everywhere:
 
 - **Frontend**: React 18 SPA built with Vite, styled with Tailwind CSS. Served as static files by the backend in production. No SSR — this is single-user behind auth.
 - **Backend**: Fastify (Node.js 20 LTS) — persistent process (not serverless) for WebSocket connections, PTY sessions, cron scheduling, and the Pulse loop.
-- **Database**: SQLite via better-sqlite3, with Drizzle ORM for type-safe queries and shared TypeScript types.
+- **Database**: MongoDB via the native `mongodb` driver (^6.12.0). TypeScript interfaces define document shapes. No ORM — direct collection operations.
 - **Shell Bridge**: node-pty for full PTY emulation — captures stdout/stderr, supports interactive programs.
 - **Realtime**: WebSockets (@fastify/websocket) for streaming LLM responses, live shell output, and command approvals.
 - **Queue**: BullMQ + Redis (or in-process queue) for scheduled tasks and agent pipeline jobs.
@@ -23,7 +23,7 @@ Single-container monorepo with TypeScript everywhere:
 - **Single-user, single-container**: No multi-tenancy, no user management, no RBAC. One user, one VPS.
 - **LLM-friendly tech choices**: React, Fastify, and TypeScript were chosen specifically because they have the most LLM training data, reducing AI-generated bugs.
 - **Backend must be persistent**: WebSocket connections, PTY sessions, cron, and the Pulse loop all require a long-running process.
-- **Type sharing**: Drizzle ORM types are shared between frontend and backend in the monorepo.
+- **Type sharing**: MongoDB document interfaces (in `packages/backend/src/db/schema.ts`) are shared between frontend and backend in the monorepo.
 
 ## State Management
 
@@ -31,6 +31,8 @@ Single-container monorepo with TypeScript everywhere:
 - **TanStack Query** for server state (caching, refetching, loading states).
 - **React Router v6** for client-side routing.
 
-## Current Status
+## Background Services
 
-The project is in the planning/specification phase. The README contains the full architecture document. No implementation code exists yet.
+- **Cron Service**: `node-cron`-based scheduler for recurring AI tasks. Each cronjob has a dedicated chat for execution results.
+- **Pulse Service**: Autonomous heartbeat that periodically wakes the AI to review data, organize information, and take proactive actions. Uses a 60-second `setInterval` tick loop (not `node-cron`). Configuration lives in `AppSettings.pulse` — no separate collection. The AI maintains continuity notes between pulses via the `manage_pulse` tool.
+- **WhatsApp Auto-Reply**: Listens for incoming WhatsApp messages and runs the AI in per-contact dedicated chats.

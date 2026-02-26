@@ -262,7 +262,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       const isTranscribing = !!(message.localAudioUrl && !message.content);
 
       return (
-        <div className="group flex justify-end px-4 py-1 animate-fade-in">
+        <div className="group flex justify-end px-4 py-1">
           <div className="max-w-[75%]">
             <div className="rounded-2xl rounded-tr-sm bg-gray-100 px-4 py-3">
               {audioSrc && <AudioPlayer src={audioSrc} />}
@@ -282,7 +282,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
     }
 
     return (
-      <div className="group flex justify-end px-4 py-1 animate-fade-in">
+      <div className="group flex justify-end px-4 py-1">
         <div className="max-w-[75%]">
           <div className="rounded-2xl rounded-tr-sm bg-gray-100 px-4 py-3 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
             {message.content}
@@ -300,7 +300,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
   }
 
   return (
-    <div className="flex justify-start px-4 py-1 animate-fade-in">
+    <div className="flex justify-start px-4 py-1">
       <div className="max-w-[80%] w-full">
         <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed">
           <ReactMarkdown
@@ -383,7 +383,7 @@ export function StreamingMessage({
   streamingMedia?: StreamingMediaItem[];
 }) {
   return (
-    <div className="flex justify-start px-4 py-1 animate-fade-in">
+    <div className="flex justify-start px-4 py-1">
       <div className="max-w-[80%] w-full">
         <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed">
           {content ? (

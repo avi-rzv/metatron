@@ -29,6 +29,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
           hasApiKey: !!s.tools?.braveSearch?.apiKey,
         },
       },
+      pulse: s.pulse,
     };
   });
 
@@ -70,6 +71,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
             hasApiKey: !!updated.tools?.braveSearch?.apiKey,
           },
         },
+        pulse: updated.pulse,
       };
     }
   );

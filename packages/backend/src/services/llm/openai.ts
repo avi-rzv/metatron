@@ -180,7 +180,219 @@ export async function streamOpenAIChat(opts: OpenAIStreamOptions): Promise<void>
         });
       }
 
+      if (opts.toolCallbacks.whatsappReadMessages) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'whatsapp_read_messages',
+            description: 'Read recent WhatsApp messages. Optionally filter by contact phone number.',
+            parameters: {
+              type: 'object',
+              properties: {
+                contact: {
+                  type: 'string',
+                  description: 'Phone number to filter messages by (optional). If omitted, returns all recent messages.',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of messages to return (default: 20, max: 100).',
+                },
+              },
+            },
+            parse: JSON.parse,
+            function: async (args: { contact?: string; limit?: number }) => {
+              return opts.toolCallbacks!.whatsappReadMessages!(args.contact, args.limit || 20);
+            },
+          },
+        });
+      }
+
+      if (opts.toolCallbacks.whatsappSendMessage) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'whatsapp_send_message',
+            description: 'Send a WhatsApp message to a phone number. Requires reply permission for the contact. Always confirm with the user before sending. Supports voice notes via as_voice flag.',
+            parameters: {
+              type: 'object',
+              properties: {
+                phone: {
+                  type: 'string',
+                  description: 'The recipient phone number in international format (e.g. "14155551234").',
+                },
+                message: {
+                  type: 'string',
+                  description: 'The text message to send (or text to convert to voice if as_voice is true).',
+                },
+                as_voice: {
+                  type: 'boolean',
+                  description: 'If true, convert the message text to a voice note and send as a WhatsApp voice message (PTT). Falls back to text if TTS fails.',
+                },
+              },
+              required: ['phone', 'message'],
+            },
+            parse: JSON.parse,
+            function: async (args: { phone: string; message: string; as_voice?: boolean }) => {
+              return opts.toolCallbacks!.whatsappSendMessage!(args.phone, args.message, args.as_voice);
+            },
+          },
+        });
+      }
+
+      if (opts.toolCallbacks.whatsappManagePermission) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'whatsapp_manage_permission',
+            description: 'Manage WhatsApp contact permissions. Grant, update, revoke, or remove read/reply access for a phone number.',
+            parameters: {
+              type: 'object',
+              properties: {
+                action: {
+                  type: 'string',
+                  description: 'The action to perform: "grant" (create/update permission), "update" (same as grant), "revoke" (disable read+reply), "remove" (delete entry entirely).',
+                },
+                phone_number: {
+                  type: 'string',
+                  description: 'The phone number in international format (e.g. "14155551234").',
+                },
+                display_name: {
+                  type: 'string',
+                  description: 'A display name for the contact (e.g. "Mom"). Required when granting new permission.',
+                },
+                can_read: {
+                  type: 'boolean',
+                  description: 'Whether the AI can read messages from this contact. Defaults to true when granting.',
+                },
+                can_reply: {
+                  type: 'boolean',
+                  description: 'Whether the AI can automatically reply to this contact. Defaults to false when granting.',
+                },
+                chat_instructions: {
+                  type: 'string',
+                  description: 'Custom instructions for AI behavior when chatting with this contact (e.g. "only discuss tech topics", "respond formally"). Stored on the permission and injected into auto-reply prompts.',
+                },
+              },
+              required: ['action', 'phone_number'],
+            },
+            parse: JSON.parse,
+            function: async (args: { action: string; phone_number: string; display_name?: string; can_read?: boolean; can_reply?: boolean; chat_instructions?: string }) => {
+              return opts.toolCallbacks!.whatsappManagePermission!(args.action, args.phone_number, args.display_name, args.can_read, args.can_reply, args.chat_instructions);
+            },
+          },
+        });
+      }
+
+      if (opts.toolCallbacks.whatsappListPermissions) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'whatsapp_list_permissions',
+            description: 'List all WhatsApp contact permissions showing who the AI can read from and reply to.',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
+            parse: JSON.parse,
+            function: async () => {
+              return opts.toolCallbacks!.whatsappListPermissions!();
+            },
+          },
+        });
+      }
+
       tools.push(
+        {
+          type: 'function',
+          function: {
+            name: 'manage_cronjob',
+            description: 'Create, list, update, delete, or toggle recurring scheduled tasks (cronjobs). When the user asks you to do something on a schedule (e.g. "every day at 9pm summarize news"), use this tool to create a cronjob.',
+            parameters: {
+              type: 'object',
+              properties: {
+                action: {
+                  type: 'string',
+                  description: 'The action: "create", "list", "update", "delete", or "toggle".',
+                },
+                name: {
+                  type: 'string',
+                  description: 'A short descriptive name for the cronjob (required for create).',
+                },
+                instruction: {
+                  type: 'string',
+                  description: 'The instruction the AI should execute when the cronjob fires (required for create).',
+                },
+                cron_expression: {
+                  type: 'string',
+                  description: 'A cron expression like "0 21 * * *" for 9pm daily (required for create). Format: minute hour day-of-month month day-of-week.',
+                },
+                job_id: {
+                  type: 'string',
+                  description: 'The ID of the cronjob (required for update, delete, toggle).',
+                },
+                enabled: {
+                  type: 'boolean',
+                  description: 'Whether the cronjob is enabled (used with update).',
+                },
+              },
+              required: ['action'],
+            },
+            parse: JSON.parse,
+            function: async (args: { action: string; name?: string; instruction?: string; cron_expression?: string; job_id?: string; enabled?: boolean }) => {
+              return opts.toolCallbacks!.manageCronjob(args.action, args.name, args.instruction, args.cron_expression, args.job_id, args.enabled);
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'manage_pulse',
+            description: 'Manage the Pulse heartbeat system — your autonomous periodic execution. Actions: "update_notes" (save continuity notes for next pulse), "get_config" (read current settings + remaining pulses + next pulse time), "update_config" (change enabled, active_days, pulses_per_day, quiet_hours).',
+            parameters: {
+              type: 'object',
+              properties: {
+                action: {
+                  type: 'string',
+                  description: 'The action: "update_notes", "get_config", or "update_config".',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Continuity notes for next pulse (max 2000 chars). Used with "update_notes".',
+                },
+                enabled: {
+                  type: 'boolean',
+                  description: 'Enable or disable the pulse system. Used with "update_config".',
+                },
+                active_days: {
+                  type: 'array',
+                  description: 'Days of week the pulse is active (0=Sun..6=Sat). Used with "update_config".',
+                  items: { type: 'number' },
+                },
+                pulses_per_day: {
+                  type: 'number',
+                  description: 'How many pulses per day: 48 (every 30min), 24 (hourly), 12 (every 2h), 6 (every 4h), or 2 (every 12h). Used with "update_config".',
+                },
+                quiet_hours: {
+                  type: 'array',
+                  description: 'Time ranges when pulses are suppressed. Array of {start, end} in "HH:mm" 24h format. Used with "update_config".',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      start: { type: 'string', description: 'Start time in HH:mm format' },
+                      end: { type: 'string', description: 'End time in HH:mm format' },
+                    },
+                    required: ['start', 'end'],
+                  },
+                },
+              },
+              required: ['action'],
+            },
+            parse: JSON.parse,
+            function: async (args: { action: string; notes?: string; enabled?: boolean; active_days?: number[]; pulses_per_day?: number; quiet_hours?: Array<{ start: string; end: string }> }) => {
+              return opts.toolCallbacks!.managePulse(args.action, args.notes, args.enabled, args.active_days, args.pulses_per_day, args.quiet_hours);
+            },
+          },
+        },
         {
           type: 'function',
           function: {
@@ -206,20 +418,44 @@ export async function streamOpenAIChat(opts: OpenAIStreamOptions): Promise<void>
           type: 'function',
           function: {
             name: 'db_query',
-            description: 'Execute a SQL query on your personal database. You can CREATE, INSERT, UPDATE, DELETE, and SELECT from tables with the ai_ prefix. Core app tables are protected.',
+            description: 'Execute a MongoDB operation on your personal database. You have full read/write access to AI-managed collections (master, contacts, schedule) and ai_-prefixed collections. Core app collections (chats, messages, settings, media, attachments) are read-only.',
             parameters: {
               type: 'object',
               properties: {
-                sql: {
+                operation: {
                   type: 'string',
-                  description: 'The SQL query to execute. Table names must use the ai_ prefix (e.g., ai_notes, ai_user_preferences).',
+                  description: 'The MongoDB operation: find, findOne, insertOne, insertMany, updateOne, updateMany, deleteOne, deleteMany, countDocuments, aggregate, createCollection, createIndex, listCollections.',
+                },
+                collection: {
+                  type: 'string',
+                  description: 'The collection name. AI-managed collections (master, contacts, schedule) support full read/write. Other write operations require the ai_ prefix (e.g., ai_notes).',
+                },
+                filter: {
+                  type: 'object',
+                  description: 'Query filter object (e.g., {"status": "active"}).',
+                },
+                data: {
+                  type: 'object',
+                  description: 'Document(s) to insert. Single object for insertOne, array for insertMany.',
+                },
+                update: {
+                  type: 'object',
+                  description: 'Update operations (e.g., {"$set": {"name": "new"}}). Required for updateOne/updateMany.',
+                },
+                sort: {
+                  type: 'object',
+                  description: 'Sort specification (e.g., {"createdAt": -1}).',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of documents to return.',
                 },
               },
-              required: ['sql'],
+              required: ['operation', 'collection'],
             },
             parse: JSON.parse,
-            function: async (args: { sql: string }) => {
-              return opts.toolCallbacks!.dbQuery(args.sql);
+            function: async (args: any) => {
+              return opts.toolCallbacks!.dbQuery(args);
             },
           },
         },

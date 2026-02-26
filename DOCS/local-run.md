@@ -21,9 +21,28 @@ npm --version    # 10.x.x
 
 Download Git for Windows from [git-scm.com](https://git-scm.com/). Accept the defaults during setup. Git Bash (included) is the recommended terminal for this project.
 
-### 3. Windows Build Tools (required for native addons)
+### 3. MongoDB
 
-The project uses `better-sqlite3`, a native Node.js addon that must be compiled from C++ source during `npm install`. Without the build tools, the install will fail with a `node-gyp` error.
+MetatronOS uses MongoDB as its database. Install MongoDB Community Edition locally:
+
+1. Download the [MongoDB Community Server MSI](https://www.mongodb.com/try/download/community) for Windows
+2. Run the installer — choose **"Complete"** setup
+3. Leave **"Install MongoDB as a Service"** checked (recommended)
+4. Click **Install**
+
+After installation, MongoDB runs automatically as a Windows service on `localhost:27017`.
+
+Verify it is running by opening a terminal and running:
+
+```bash
+mongosh --eval "db.runCommand({ ping: 1 })"
+```
+
+You should see `{ ok: 1 }`.
+
+### 4. Windows Build Tools (required for native addons)
+
+The project uses `node-pty`, a native Node.js addon that must be compiled from C++ source during `npm install`. Without the build tools, the install will fail with a `node-gyp` error.
 
 **Install Visual Studio Build Tools (free):**
 
@@ -68,7 +87,7 @@ From the repository root, install all workspace dependencies at once:
 npm install
 ```
 
-This installs packages for both `packages/backend` and `packages/frontend` via npm workspaces. The native addon (`better-sqlite3`) will be compiled here using the build tools from the prerequisite step. Compilation may take 30–60 seconds.
+This installs packages for both `packages/backend` and `packages/frontend` via npm workspaces. The `node-pty` native addon will be compiled here using the build tools from the prerequisite step. Compilation may take 30–60 seconds.
 
 **If you see a `node-gyp` error**, the build tools are not installed or not found. Re-read the prerequisites section and ensure Visual Studio Build Tools are installed with the "Desktop development with C++" workload selected.
 
@@ -93,7 +112,8 @@ Open `packages/backend/.env` in any text editor. The defaults work for local dev
 ```env
 PORT=4000
 HOST=0.0.0.0
-DATABASE_URL=./data/metatron.db
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DB=metatron
 ENCRYPTION_SECRET=change-this-to-a-long-random-string-in-production
 FRONTEND_ORIGIN=http://localhost:3000
 NODE_ENV=development
@@ -150,21 +170,18 @@ http://localhost:3000
 
 ## Database
 
-The SQLite database is created automatically on first backend startup. No migration commands are needed for a fresh local setup — the backend runs `CREATE TABLE IF NOT EXISTS` on every start.
+MongoDB collections and indexes are created automatically on first backend startup. No migration commands are needed for a fresh local setup — the backend creates indexes via `createIndex()` on every start (idempotent).
 
-The database file is written to `packages/backend/data/metatron.db`. This path is relative to the backend's working directory and is created automatically.
+Make sure MongoDB is running before starting the backend. If you installed it as a Windows service (recommended), it starts automatically.
 
-**Drizzle-kit commands** (run from `packages/backend/`):
+**If migrating from an older SQLite-based installation**, run the one-time migration script:
 
 ```bash
 cd packages/backend
-
-npm run db:generate   # generates SQL migration files from schema changes
-npm run db:push       # applies current schema directly to DB (dev shortcut, no migration files)
-npm run db:migrate    # applies pending migration files
+npm run migrate:sqlite-to-mongo
 ```
 
-For local iteration, `db:push` is the fastest way to apply schema changes. Use `db:generate` + `db:migrate` for production.
+This reads data from the old `data/metatron.db` SQLite file and inserts it into MongoDB. Safe to run multiple times.
 
 ---
 
@@ -198,9 +215,22 @@ The C++ build tools are missing or not detected. Fix:
 2. Restart your terminal (environment variables need to be refreshed)
 3. Run `npm install` again
 
-### Backend fails to start — `Cannot find module './data/metatron.db'`
+### Backend fails to start — MongoDB connection error
 
-This is normal on first run. The data directory and `.db` file are created automatically when the backend starts. If the error persists, check that `DATABASE_URL=./data/metatron.db` is correctly set in `packages/backend/.env`.
+MongoDB is not running. Check its status:
+
+```bash
+# Windows — check if the MongoDB service is running
+sc query MongoDB
+
+# If not running, start it
+net start MongoDB
+```
+
+If MongoDB was not installed as a service, start it manually:
+```bash
+mongod --dbpath "C:\data\db"
+```
 
 ### Backend fails to start — `ENCRYPTION_SECRET` error
 

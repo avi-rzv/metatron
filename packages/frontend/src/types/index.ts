@@ -103,6 +103,25 @@ export interface ToolConfig {
   hasApiKey?: boolean;
 }
 
+export interface QuietHoursRange {
+  start: string;
+  end: string;
+}
+
+export type PulseInterval = 48 | 24 | 12 | 6 | 2;
+
+export interface PulseSettings {
+  enabled: boolean;
+  activeDays: number[];
+  pulsesPerDay: PulseInterval;
+  quietHours: QuietHoursRange[];
+  chatId: string | null;
+  notes: string;
+  lastPulseAt: string | null;
+  pulsesToday: number;
+  todayDate: string | null;
+}
+
 export interface AppSettings {
   primaryModel: ModelWithThinking;
   fallbackModels: ModelWithThinking[];
@@ -116,6 +135,7 @@ export interface AppSettings {
   tools: {
     braveSearch: ToolConfig;
   };
+  pulse: PulseSettings;
 }
 
 export interface SystemInstruction {
@@ -123,5 +143,32 @@ export interface SystemInstruction {
   memory: string;
   memoryEnabled: boolean;
   dbSchema: string;
+  updatedAt: string;
+}
+
+export interface CronJob {
+  id: string;
+  name: string;
+  instruction: string;
+  cronExpression: string;
+  timezone: string;
+  enabled: boolean;
+  chatId: string;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppPermission {
+  id: string;
+  phoneNumber: string;
+  displayName: string;
+  contactId: string | null;
+  canRead: boolean;
+  canReply: boolean;
+  chatInstructions: string | null;
+  chatId: string | null;
+  createdAt: string;
   updatedAt: string;
 }

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { db } from '../db/index.js';
-import { chats, messages, media, attachments } from '../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { chatsCol, messagesCol, mediaCol, attachmentsCol } from '../db/index.js';
+import { toApiDoc, toApiDocs } from '../db/utils.js';
+import { deleteChat } from '../db/cascade.js';
 import { nanoid } from 'nanoid';
 import { writeFile } from 'fs/promises';
 import { join, extname } from 'path';
@@ -52,56 +52,43 @@ function stripJsonWrapper(content: string): string {
 export async function chatRoutes(fastify: FastifyInstance) {
   // GET /api/chats
   fastify.get('/api/chats', async () => {
-    return db.select().from(chats).orderBy(desc(chats.updatedAt)).all();
+    const docs = await chatsCol.find().sort({ updatedAt: -1 }).toArray();
+    return toApiDocs(docs);
   });
 
   // POST /api/chats — create new chat
   fastify.post<{
     Body: { title?: string; provider: string; model: string };
   }>('/api/chats', async (req) => {
-    const id = nanoid();
     const now = new Date();
     const chat = {
-      id,
+      _id: nanoid(),
       title: req.body.title ?? 'New Chat',
       provider: req.body.provider,
       model: req.body.model,
       createdAt: now,
       updatedAt: now,
     };
-    db.insert(chats).values(chat).run();
-    return chat;
+    await chatsCol.insertOne(chat);
+    return toApiDoc(chat);
   });
 
   // GET /api/chats/:id
   fastify.get<{ Params: { id: string } }>('/api/chats/:id', async (req, reply) => {
-    const chat = db.select().from(chats).where(eq(chats.id, req.params.id)).get();
+    const chat = await chatsCol.findOne({ _id: req.params.id });
     if (!chat) {
       reply.status(404).send({ error: 'Chat not found' });
       return;
     }
-    const msgs = db
-      .select()
-      .from(messages)
-      .where(eq(messages.chatId, req.params.id))
-      .orderBy(messages.createdAt)
-      .all();
-    const allMedia = db
-      .select()
-      .from(media)
-      .where(eq(media.chatId, req.params.id))
-      .all();
+    const msgs = await messagesCol.find({ chatId: req.params.id }).sort({ createdAt: 1 }).toArray();
+    const allMedia = await mediaCol.find({ chatId: req.params.id }).toArray();
     const mediaByMessage = new Map<string, typeof allMedia>();
     for (const m of allMedia) {
       const arr = mediaByMessage.get(m.messageId) ?? [];
       arr.push(m);
       mediaByMessage.set(m.messageId, arr);
     }
-    const allAttachments = db
-      .select()
-      .from(attachments)
-      .where(eq(attachments.chatId, req.params.id))
-      .all();
+    const allAttachments = await attachmentsCol.find({ chatId: req.params.id }).toArray();
     const attachmentsByMessage = new Map<string, typeof allAttachments>();
     for (const a of allAttachments) {
       const arr = attachmentsByMessage.get(a.messageId) ?? [];
@@ -109,17 +96,17 @@ export async function chatRoutes(fastify: FastifyInstance) {
       attachmentsByMessage.set(a.messageId, arr);
     }
     const enrichedMsgs = msgs.map((m) => ({
-      ...m,
-      citations: m.citations ? JSON.parse(m.citations) : null,
-      media: mediaByMessage.get(m.id) ?? [],
-      attachments: attachmentsByMessage.get(m.id) ?? [],
+      ...toApiDoc(m),
+      citations: m.citations ?? null,
+      media: toApiDocs(mediaByMessage.get(m._id) ?? []),
+      attachments: toApiDocs(attachmentsByMessage.get(m._id) ?? []),
     }));
-    return { ...chat, messages: enrichedMsgs };
+    return { ...toApiDoc(chat), messages: enrichedMsgs };
   });
 
   // DELETE /api/chats/:id
   fastify.delete<{ Params: { id: string } }>('/api/chats/:id', async (req, reply) => {
-    db.delete(chats).where(eq(chats.id, req.params.id)).run();
+    await deleteChat(req.params.id);
     reply.status(204).send();
   });
 
@@ -127,11 +114,12 @@ export async function chatRoutes(fastify: FastifyInstance) {
   fastify.patch<{ Params: { id: string }; Body: { title: string } }>(
     '/api/chats/:id',
     async (req) => {
-      db.update(chats)
-        .set({ title: req.body.title, updatedAt: new Date() })
-        .where(eq(chats.id, req.params.id))
-        .run();
-      return db.select().from(chats).where(eq(chats.id, req.params.id)).get();
+      await chatsCol.updateOne(
+        { _id: req.params.id },
+        { $set: { title: req.body.title, updatedAt: new Date() } }
+      );
+      const updated = await chatsCol.findOne({ _id: req.params.id });
+      return updated ? toApiDoc(updated) : null;
     }
   );
 
@@ -146,7 +134,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
       audio?: { filename: string; mimeType: string; size: number };
     };
   }>('/api/chats/:id/stream', async (req, reply) => {
-    const chat = db.select().from(chats).where(eq(chats.id, req.params.id)).get();
+    const chat = await chatsCol.findOne({ _id: req.params.id });
     if (!chat) {
       reply.status(404).send({ error: 'Chat not found' });
       return;
@@ -166,9 +154,14 @@ export async function chatRoutes(fastify: FastifyInstance) {
     // Save user message
     const userMsgId = nanoid();
     const now = new Date();
-    db.insert(messages)
-      .values({ id: userMsgId, chatId: chat.id, role: 'user', content: userContent ?? '', createdAt: now })
-      .run();
+    await messagesCol.insertOne({
+      _id: userMsgId,
+      chatId: chat._id,
+      role: 'user',
+      content: userContent ?? '',
+      citations: null,
+      createdAt: now,
+    });
 
     // Save attachments to disk and DB
     const savedAttachments: Array<{ mimeType: string; data: string; name: string }> = [];
@@ -179,16 +172,16 @@ export async function chatRoutes(fastify: FastifyInstance) {
       const buffer = Buffer.from(att.data, 'base64');
       await writeFile(filepath, buffer);
       const attId = nanoid();
-      db.insert(attachments).values({
-        id: attId,
-        chatId: chat.id,
+      await attachmentsCol.insertOne({
+        _id: attId,
+        chatId: chat._id,
         messageId: userMsgId,
         filename,
         originalName: att.name,
         mimeType: att.mimeType,
         size: buffer.length,
         createdAt: now,
-      }).run();
+      });
       savedAttachments.push({ mimeType: att.mimeType, data: att.data, name: att.name });
     }
 
@@ -196,38 +189,35 @@ export async function chatRoutes(fastify: FastifyInstance) {
     if (req.body.audio) {
       const audio = req.body.audio;
       const audioAttId = nanoid();
-      db.insert(attachments).values({
-        id: audioAttId,
-        chatId: chat.id,
+      await attachmentsCol.insertOne({
+        _id: audioAttId,
+        chatId: chat._id,
         messageId: userMsgId,
         filename: audio.filename,
         originalName: 'voice-message' + (audio.filename.substring(audio.filename.lastIndexOf('.')) || '.webm'),
         mimeType: audio.mimeType,
         size: audio.size,
         createdAt: now,
-      }).run();
+      });
     }
 
     // Auto-title the chat after first message
-    const msgCount = db.select().from(messages).where(eq(messages.chatId, chat.id)).all().length;
+    const msgCount = await messagesCol.countDocuments({ chatId: chat._id });
     if (msgCount <= 1) {
-      const title = userContent.slice(0, 60) + (userContent.length > 60 ? '…' : '');
-      db.update(chats).set({ title, updatedAt: new Date() }).where(eq(chats.id, chat.id)).run();
+      const title = userContent.slice(0, 60) + (userContent.length > 60 ? '...' : '');
+      await chatsCol.updateOne({ _id: chat._id }, { $set: { title, updatedAt: new Date() } });
     } else {
-      db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, chat.id)).run();
+      await chatsCol.updateOne({ _id: chat._id }, { $set: { updatedAt: new Date() } });
     }
 
     // Load conversation history
-    const history = db
-      .select()
-      .from(messages)
-      .where(eq(messages.chatId, chat.id))
-      .orderBy(messages.createdAt)
-      .all()
-      .filter((m) => m.id !== userMsgId); // exclude the just-inserted message
+    const history = await messagesCol
+      .find({ chatId: chat._id, _id: { $ne: userMsgId } })
+      .sort({ createdAt: 1 })
+      .toArray();
 
     // Query all media for this chat and group by messageId
-    const allMedia = db.select().from(media).where(eq(media.chatId, chat.id)).all();
+    const allMedia = await mediaCol.find({ chatId: chat._id }).toArray();
     const mediaByMsgId = new Map<string, typeof allMedia>();
     for (const m of allMedia) {
       const arr = mediaByMsgId.get(m.messageId) ?? [];
@@ -235,15 +225,12 @@ export async function chatRoutes(fastify: FastifyInstance) {
       mediaByMsgId.set(m.messageId, arr);
     }
 
-    // Query all attachments for this chat (for history context — but we don't re-load base64 from disk for history)
-    // Attachments in history are noted as text annotations; only the current message sends actual base64
-
     // Create annotated history for LLM context (not persisted)
     const annotatedHistory = history.map((m) => {
-      const msgMedia = mediaByMsgId.get(m.id);
+      const msgMedia = mediaByMsgId.get(m._id);
       if (!msgMedia?.length || m.role !== 'assistant') return m;
       const annotations = msgMedia
-        .map((med) => `[Generated Image | id: ${med.id} | description: "${med.shortDescription}"]`)
+        .map((med) => `[Generated Image | id: ${med._id} | description: "${med.shortDescription}"]`)
         .join('\n');
       return { ...m, content: m.content + '\n\n' + annotations };
     });
@@ -268,15 +255,14 @@ export async function chatRoutes(fastify: FastifyInstance) {
     let collectedCitations: { url: string; title: string }[] = [];
 
     // Pre-insert the assistant message so that media FK references are valid during streaming
-    db.insert(messages)
-      .values({
-        id: assistantMsgId,
-        chatId: chat.id,
-        role: 'assistant',
-        content: '',
-        createdAt: new Date(),
-      })
-      .run();
+    await messagesCol.insertOne({
+      _id: assistantMsgId,
+      chatId: chat._id,
+      role: 'assistant',
+      content: '',
+      citations: null,
+      createdAt: new Date(),
+    });
 
     const sendEvent = (event: string, data: unknown) => {
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -291,7 +277,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     const toolCallbacks = sysInstr.memoryEnabled
       ? createAIToolCallbacks({
           braveApiKey,
-          chatId: chat.id,
+          chatId: chat._id,
           messageId: assistantMsgId,
           settings,
           onImageGenerated,
@@ -309,18 +295,18 @@ export async function chatRoutes(fastify: FastifyInstance) {
       collectedCitations = citations;
     };
 
-    const onDone = () => {
+    const onDone = async () => {
       // Strip JSON wrapping if the model output a JSON object instead of plain text
       let cleanContent = stripJsonWrapper(fullContent);
 
       // Update the pre-inserted assistant message with final content and citations
-      db.update(messages)
-        .set({
+      await messagesCol.updateOne(
+        { _id: assistantMsgId },
+        { $set: {
           content: cleanContent,
-          citations: collectedCitations.length > 0 ? JSON.stringify(collectedCitations) : null,
-        })
-        .where(eq(messages.id, assistantMsgId))
-        .run();
+          citations: collectedCitations.length > 0 ? collectedCitations : null,
+        } }
+      );
       sendEvent('done', {
         messageId: assistantMsgId,
         citations: collectedCitations.length > 0 ? collectedCitations : undefined,
@@ -329,17 +315,17 @@ export async function chatRoutes(fastify: FastifyInstance) {
       reply.raw.end();
     };
 
-    const onError = (err: Error) => {
+    const onError = async (err: Error) => {
       console.error('[stream error]', err);
       // Clean up the pre-inserted empty assistant message on error
       if (!fullContent) {
-        db.delete(messages).where(eq(messages.id, assistantMsgId)).run();
+        await messagesCol.deleteOne({ _id: assistantMsgId });
       } else {
         // Partial content — save what we have
-        db.update(messages)
-          .set({ content: fullContent })
-          .where(eq(messages.id, assistantMsgId))
-          .run();
+        await messagesCol.updateOne(
+          { _id: assistantMsgId },
+          { $set: { content: fullContent } }
+        );
       }
       sendEvent('error', { message: err.message });
       reply.raw.end();
@@ -351,7 +337,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     const thinkingLevel = getThinkingLevelForModel(settings, activeModel);
 
     if (!apiKey) {
-      onError(new Error(`${provider === 'gemini' ? 'Gemini' : 'OpenAI'} API key not configured`));
+      await onError(new Error(`${provider === 'gemini' ? 'Gemini' : 'OpenAI'} API key not configured`));
       return;
     }
 

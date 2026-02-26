@@ -48,16 +48,44 @@ const TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
   {
     name: 'db_query',
-    description: 'Execute a SQL query on your personal database. You can CREATE, INSERT, UPDATE, DELETE, and SELECT from tables with the ai_ prefix. Core app tables are protected.',
+    description: 'Execute a MongoDB operation on your personal database. You have full read/write access to AI-managed collections (master, contacts, schedule) and ai_-prefixed collections. Core app collections (chats, messages, settings, media, attachments) are read-only.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        sql: {
+        operation: {
           type: Type.STRING,
-          description: 'The SQL query to execute. Table names must use the ai_ prefix (e.g., ai_notes, ai_user_preferences).',
+          description: 'The MongoDB operation: find, findOne, insertOne, insertMany, updateOne, updateMany, deleteOne, deleteMany, countDocuments, aggregate, createCollection, createIndex, listCollections.',
+        },
+        collection: {
+          type: Type.STRING,
+          description: 'The collection name. AI-managed collections (master, contacts, schedule) support full read/write. Other write operations require the ai_ prefix (e.g., ai_notes).',
+        },
+        filter: {
+          type: Type.OBJECT,
+          description: 'Query filter object (e.g., {"status": "active"}).',
+          properties: {},
+        },
+        data: {
+          type: Type.OBJECT,
+          description: 'Document(s) to insert. Single object for insertOne, array for insertMany.',
+          properties: {},
+        },
+        update: {
+          type: Type.OBJECT,
+          description: 'Update operations (e.g., {"$set": {"name": "new"}}). Required for updateOne/updateMany.',
+          properties: {},
+        },
+        sort: {
+          type: Type.OBJECT,
+          description: 'Sort specification (e.g., {"createdAt": -1}).',
+          properties: {},
+        },
+        limit: {
+          type: Type.NUMBER,
+          description: 'Maximum number of documents to return.',
         },
       },
-      required: ['sql'],
+      required: ['operation', 'collection'],
     },
   },
   {
@@ -72,6 +100,83 @@ const TOOL_DECLARATIONS: FunctionDeclaration[] = [
         },
       },
       required: ['schema'],
+    },
+  },
+  {
+    name: 'manage_cronjob',
+    description: 'Create, list, update, delete, or toggle recurring scheduled tasks (cronjobs). When the user asks you to do something on a schedule (e.g. "every day at 9pm summarize news"), use this tool to create a cronjob.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        action: {
+          type: Type.STRING,
+          description: 'The action: "create", "list", "update", "delete", or "toggle".',
+        },
+        name: {
+          type: Type.STRING,
+          description: 'A short descriptive name for the cronjob (required for create).',
+        },
+        instruction: {
+          type: Type.STRING,
+          description: 'The instruction the AI should execute when the cronjob fires (required for create).',
+        },
+        cron_expression: {
+          type: Type.STRING,
+          description: 'A cron expression like "0 21 * * *" for 9pm daily (required for create). Format: minute hour day-of-month month day-of-week.',
+        },
+        job_id: {
+          type: Type.STRING,
+          description: 'The ID of the cronjob (required for update, delete, toggle).',
+        },
+        enabled: {
+          type: Type.BOOLEAN,
+          description: 'Whether the cronjob is enabled (used with update).',
+        },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'manage_pulse',
+    description: 'Manage the Pulse heartbeat system — your autonomous periodic execution. Actions: "update_notes" (save continuity notes for next pulse), "get_config" (read current settings + remaining pulses + next pulse time), "update_config" (change enabled, active_days, pulses_per_day, quiet_hours).',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        action: {
+          type: Type.STRING,
+          description: 'The action: "update_notes", "get_config", or "update_config".',
+        },
+        notes: {
+          type: Type.STRING,
+          description: 'Continuity notes for next pulse (max 2000 chars). Used with "update_notes".',
+        },
+        enabled: {
+          type: Type.BOOLEAN,
+          description: 'Enable or disable the pulse system. Used with "update_config".',
+        },
+        active_days: {
+          type: Type.ARRAY,
+          description: 'Days of week the pulse is active (0=Sun..6=Sat). Used with "update_config".',
+          items: { type: Type.NUMBER },
+        },
+        pulses_per_day: {
+          type: Type.NUMBER,
+          description: 'How many pulses per day: 48 (every 30min), 24 (hourly), 12 (every 2h), 6 (every 4h), or 2 (every 12h). Used with "update_config".',
+        },
+        quiet_hours: {
+          type: Type.ARRAY,
+          description: 'Time ranges when pulses are suppressed. Array of {start, end} in "HH:mm" 24h format. Used with "update_config".',
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              start: { type: Type.STRING, description: 'Start time in HH:mm format' },
+              end: { type: Type.STRING, description: 'End time in HH:mm format' },
+            },
+            required: ['start', 'end'],
+          },
+        },
+      },
+      required: ['action'],
     },
   },
   {
@@ -132,7 +237,7 @@ async function executeFunctionCalls(
         resultStr = await callbacks.saveMemory(args.memory ?? '');
         break;
       case 'db_query':
-        resultStr = await callbacks.dbQuery(args.sql ?? '');
+        resultStr = await callbacks.dbQuery(args as any);
         break;
       case 'update_db_schema':
         resultStr = await callbacks.updateDbSchema(args.schema ?? '');
@@ -158,6 +263,64 @@ async function executeFunctionCalls(
           resultStr = JSON.stringify({ error: 'Image editing is not enabled' });
         }
         break;
+      case 'whatsapp_read_messages':
+        if (callbacks.whatsappReadMessages) {
+          resultStr = await callbacks.whatsappReadMessages(args.contact, Number(args.limit) || 20);
+        } else {
+          resultStr = JSON.stringify({ error: 'WhatsApp is not connected' });
+        }
+        break;
+      case 'whatsapp_send_message':
+        if (callbacks.whatsappSendMessage) {
+          resultStr = await callbacks.whatsappSendMessage(args.phone ?? '', args.message ?? '', String(args.as_voice) === 'true');
+        } else {
+          resultStr = JSON.stringify({ error: 'WhatsApp is not connected' });
+        }
+        break;
+      case 'whatsapp_manage_permission':
+        if (callbacks.whatsappManagePermission) {
+          resultStr = await callbacks.whatsappManagePermission(
+            args.action ?? '',
+            args.phone_number ?? '',
+            args.display_name,
+            args.can_read !== undefined ? String(args.can_read) === 'true' : undefined,
+            args.can_reply !== undefined ? String(args.can_reply) === 'true' : undefined,
+            args.chat_instructions,
+          );
+        } else {
+          resultStr = JSON.stringify({ error: 'WhatsApp is not connected' });
+        }
+        break;
+      case 'whatsapp_list_permissions':
+        if (callbacks.whatsappListPermissions) {
+          resultStr = await callbacks.whatsappListPermissions();
+        } else {
+          resultStr = JSON.stringify({ error: 'WhatsApp is not connected' });
+        }
+        break;
+      case 'manage_cronjob':
+        resultStr = await callbacks.manageCronjob(
+          args.action ?? '',
+          args.name,
+          args.instruction,
+          args.cron_expression,
+          args.job_id,
+          args.enabled !== undefined ? String(args.enabled) === 'true' : undefined,
+        );
+        break;
+      case 'manage_pulse': {
+        const quietHoursArg = (fc.args as any)?.quiet_hours;
+        const activeDaysArg = (fc.args as any)?.active_days;
+        resultStr = await callbacks.managePulse(
+          args.action ?? '',
+          args.notes,
+          args.enabled !== undefined ? String(args.enabled) === 'true' : undefined,
+          activeDaysArg ? (Array.isArray(activeDaysArg) ? activeDaysArg.map(Number) : undefined) : undefined,
+          args.pulses_per_day !== undefined ? Number(args.pulses_per_day) : undefined,
+          quietHoursArg,
+        );
+        break;
+      }
       default:
         resultStr = JSON.stringify({ error: `Unknown function: ${name}` });
     }
@@ -205,6 +368,95 @@ export async function streamGeminiChat(opts: GeminiStreamOptions): Promise<void>
             },
           },
           required: ['query'],
+        },
+      });
+    }
+    if (opts.toolCallbacks.whatsappReadMessages) {
+      declarations.push({
+        name: 'whatsapp_read_messages',
+        description: 'Read recent WhatsApp messages. Only returns messages from contacts with read permission. Optionally filter by contact phone number.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            contact: {
+              type: Type.STRING,
+              description: 'Phone number to filter messages by (optional). If omitted, returns all recent messages from permitted contacts.',
+            },
+            limit: {
+              type: Type.NUMBER,
+              description: 'Maximum number of messages to return (default: 20, max: 100).',
+            },
+          },
+        },
+      });
+    }
+    if (opts.toolCallbacks.whatsappSendMessage) {
+      declarations.push({
+        name: 'whatsapp_send_message',
+        description: 'Send a WhatsApp message to a phone number. Requires reply permission for the contact. Always confirm with the user before sending. Supports voice notes via as_voice flag.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            phone: {
+              type: Type.STRING,
+              description: 'The recipient phone number in international format (e.g. "14155551234").',
+            },
+            message: {
+              type: Type.STRING,
+              description: 'The text message to send (or text to convert to voice if as_voice is true).',
+            },
+            as_voice: {
+              type: Type.BOOLEAN,
+              description: 'If true, convert the message text to a voice note and send as a WhatsApp voice message (PTT). Falls back to text if TTS fails.',
+            },
+          },
+          required: ['phone', 'message'],
+        },
+      });
+    }
+    if (opts.toolCallbacks.whatsappManagePermission) {
+      declarations.push({
+        name: 'whatsapp_manage_permission',
+        description: 'Manage WhatsApp contact permissions. Grant, update, revoke, or remove read/reply access for a phone number.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: {
+              type: Type.STRING,
+              description: 'The action to perform: "grant" (create/update permission), "update" (same as grant), "revoke" (disable read+reply), "remove" (delete entry entirely).',
+            },
+            phone_number: {
+              type: Type.STRING,
+              description: 'The phone number in international format (e.g. "14155551234").',
+            },
+            display_name: {
+              type: Type.STRING,
+              description: 'A display name for the contact (e.g. "Mom"). Required when granting new permission.',
+            },
+            can_read: {
+              type: Type.BOOLEAN,
+              description: 'Whether the AI can read messages from this contact. Defaults to true when granting.',
+            },
+            can_reply: {
+              type: Type.BOOLEAN,
+              description: 'Whether the AI can automatically reply to this contact. Defaults to false when granting.',
+            },
+            chat_instructions: {
+              type: Type.STRING,
+              description: 'Custom instructions for AI behavior when chatting with this contact (e.g. "only discuss tech topics", "respond formally"). Stored on the permission and injected into auto-reply prompts.',
+            },
+          },
+          required: ['action', 'phone_number'],
+        },
+      });
+    }
+    if (opts.toolCallbacks.whatsappListPermissions) {
+      declarations.push({
+        name: 'whatsapp_list_permissions',
+        description: 'List all WhatsApp contact permissions showing who the AI can read from and reply to.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {},
         },
       });
     }

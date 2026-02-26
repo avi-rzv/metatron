@@ -11,6 +11,7 @@ import {
   faGear,
   faToolbox,
   faImages,
+  faClock,
 } from '@fortawesome/free-solid-svg-icons';
 import { useUIStore } from '@/store/uiStore';
 import { t } from '@/i18n';
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/gallery', icon: faImages, label: t.nav.gallery },
   { to: '/models', icon: faSlidersH, label: t.nav.modelManager },
   { to: '/tools', icon: faToolbox, label: t.nav.tools },
+  { to: '/schedule', icon: faClock, label: t.nav.schedule },
   { to: '/system-instruction', icon: faBrain, label: t.nav.memory },
 ];
 

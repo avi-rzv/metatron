@@ -1,4 +1,4 @@
-import type { Chat, AppSettings, Message, SystemInstruction, Citation, Media, Attachment } from '../types';
+import type { Chat, AppSettings, Message, SystemInstruction, Citation, Media, Attachment, WhatsAppPermission, CronJob } from '../types';
 
 const BASE = '/api';
 
@@ -59,6 +59,45 @@ export const api = {
     },
   },
 
+  whatsapp: {
+    status: () => request<{ status: string; phoneNumber: string | null }>('/whatsapp/status'),
+    connect: () => request<{ status: string }>('/whatsapp/connect', { method: 'POST', body: '{}' }),
+    qr: () => request<{ qr: string }>('/whatsapp/qr'),
+    disconnect: (clearSession = false) =>
+      request<{ status: string }>('/whatsapp/disconnect', {
+        method: 'POST',
+        body: JSON.stringify({ clearSession }),
+      }),
+    messages: (contact?: string, limit?: number) => {
+      const params = new URLSearchParams();
+      if (contact) params.set('contact', contact);
+      if (limit) params.set('limit', String(limit));
+      const qs = params.toString();
+      return request<{ messages: any[] }>(`/whatsapp/messages${qs ? `?${qs}` : ''}`);
+    },
+    permissions: {
+      list: () => request<WhatsAppPermission[]>('/whatsapp/permissions'),
+      create: (data: { phoneNumber: string; displayName: string; canRead?: boolean; canReply?: boolean }) =>
+        request<WhatsAppPermission>('/whatsapp/permissions', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id: string, data: { displayName?: string; canRead?: boolean; canReply?: boolean; chatInstructions?: string | null }) =>
+        request<WhatsAppPermission>(`/whatsapp/permissions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      delete: (id: string) =>
+        fetch(`${BASE}/whatsapp/permissions/${id}`, { method: 'DELETE' }),
+    },
+  },
+
+  cronjobs: {
+    list: () => request<CronJob[]>('/cronjobs'),
+    create: (data: { name: string; instruction: string; cronExpression: string; timezone?: string }) =>
+      request<CronJob>('/cronjobs', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; instruction?: string; cronExpression?: string; timezone?: string; enabled?: boolean }) =>
+      request<CronJob>(`/cronjobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetch(`${BASE}/cronjobs/${id}`, { method: 'DELETE' }),
+    toggle: (id: string) =>
+      request<CronJob>(`/cronjobs/${id}/toggle`, { method: 'POST', body: '{}' }),
+  },
+
   systemInstruction: {
     get: () => request<SystemInstruction>('/system-instruction'),
     update: (data: Partial<SystemInstruction>) =>
@@ -77,6 +116,70 @@ export function getMediaUrl(mediaId: string): string {
 
 export function getUploadUrl(attachmentId: string): string {
   return `${BASE}/uploads/${attachmentId}/file`;
+}
+
+// WhatsApp QR SSE stream
+export function streamWhatsAppQR(callbacks: {
+  onQr: (qr: string) => void;
+  onStatus: (status: string, phoneNumber: string | null) => void;
+  onConnected: (phoneNumber: string | null) => void;
+  onClose?: () => void;
+  onError?: (err: Error) => void;
+}): AbortController {
+  const controller = new AbortController();
+
+  fetch(`${BASE}/whatsapp/qr/stream`, { signal: controller.signal })
+    .then(async (res) => {
+      if (!res.ok) {
+        callbacks.onError?.(new Error('Failed to connect to QR stream'));
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onClose?.();
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        let eventType = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventType === 'qr') callbacks.onQr(data.qr);
+              else if (eventType === 'status') callbacks.onStatus(data.status, data.phoneNumber);
+              else if (eventType === 'connected') callbacks.onConnected(data.phoneNumber);
+            } catch {
+              // Ignore malformed SSE data
+            }
+            eventType = '';
+          }
+        }
+      }
+
+      // Stream ended (backend restart, etc.)
+      callbacks.onClose?.();
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        callbacks.onError?.(err);
+      }
+    });
+
+  return controller;
 }
 
 // SSE streaming

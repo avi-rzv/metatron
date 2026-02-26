@@ -1,58 +1,136 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+/** MongoDB document interfaces for MetatronOS */
 
-export const chats = sqliteTable('chats', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull().default('New Chat'),
-  provider: text('provider').notNull().default('gemini'), // 'gemini' | 'openai'
-  model: text('model').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-});
+export interface Chat {
+  _id: string;        // nanoid
+  title: string;
+  provider: string;   // 'gemini' | 'openai'
+  model: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-export const messages = sqliteTable('messages', {
-  id: text('id').primaryKey(),
-  chatId: text('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // 'user' | 'assistant'
-  content: text('content').notNull(),
-  citations: text('citations'), // JSON array of {url, title} or null
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-});
+export interface Message {
+  _id: string;        // nanoid
+  chatId: string;
+  role: string;       // 'user' | 'assistant'
+  content: string;
+  citations: Array<{ url: string; title: string }> | null;
+  createdAt: Date;
+}
 
-export const settings = sqliteTable('settings', {
-  key: text('key').primaryKey(),
-  value: text('value').notNull(),
-});
+export interface Setting {
+  _id: string;        // the key string (e.g. 'app_settings')
+  value: string;
+}
 
-export const media = sqliteTable('media', {
-  id: text('id').primaryKey(),
-  chatId: text('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
-  messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
-  filename: text('filename').notNull(),
-  prompt: text('prompt').notNull(),
-  shortDescription: text('short_description').notNull().default(''),
-  mimeType: text('mime_type').notNull(),
-  size: integer('size').notNull(),
-  model: text('model').notNull(),
-  sourceMediaId: text('source_media_id'),  // null = generated, set = edited from this ID
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-});
+export interface MediaDoc {
+  _id: string;        // nanoid
+  chatId: string;
+  messageId: string;
+  filename: string;
+  prompt: string;
+  shortDescription: string;
+  mimeType: string;
+  size: number;
+  model: string;
+  sourceMediaId: string | null;
+  createdAt: Date;
+}
 
-export type Chat = typeof chats.$inferSelect;
-export type NewChat = typeof chats.$inferInsert;
-export type Message = typeof messages.$inferSelect;
-export type NewMessage = typeof messages.$inferInsert;
-export const attachments = sqliteTable('attachments', {
-  id: text('id').primaryKey(),
-  chatId: text('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
-  messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
-  filename: text('filename').notNull(),
-  originalName: text('original_name').notNull(),
-  mimeType: text('mime_type').notNull(),
-  size: integer('size').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-});
+export interface AttachmentDoc {
+  _id: string;        // nanoid
+  chatId: string;
+  messageId: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  createdAt: Date;
+}
 
-export type Media = typeof media.$inferSelect;
-export type NewMedia = typeof media.$inferInsert;
-export type Attachment = typeof attachments.$inferSelect;
-export type NewAttachment = typeof attachments.$inferInsert;
+// --- AI-managed collection types ---
+
+export type MaritalStatus = 'single' | 'married' | 'engaged' | 'divorced' | 'widowed' | 'other';
+export type EventStatus = 'confirmed' | 'tentative' | 'cancelled';
+
+export interface Master {
+  _id: string;
+  firstName: string | null;
+  lastName: string | null;
+  dateOfBirth: string | null;   // ISO date string
+  gender: string | null;
+  maritalStatus: MaritalStatus | null;
+  children: number | null;
+  profession: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  street: string | null;
+  city: string | null;
+  country: string | null;
+  zipCode: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Contact {
+  _id: string;
+  firstName: string | null;
+  lastName: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  maritalStatus: MaritalStatus | null;
+  children: number | null;
+  profession: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  street: string | null;
+  city: string | null;
+  country: string | null;
+  zipCode: string | null;
+  relation: string;             // free-form: father, friend, colleague, etc.
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ScheduleEvent {
+  _id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  dtstart: Date;
+  dtend: Date;
+  allDay: boolean;
+  rrule: string | null;         // RFC 5545 RRULE string
+  status: EventStatus;
+  reminder: number | null;      // minutes before event
+  contactId: string | null;     // informational link to contacts collection
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WhatsAppPermission {
+  _id: string;           // nanoid
+  phoneNumber: string;   // digits only, e.g. "14155551234"
+  displayName: string;   // user label, e.g. "Mom"
+  contactId: string | null;  // optional link to contacts._id
+  canRead: boolean;
+  canReply: boolean;
+  chatInstructions: string | null; // per-contact AI behavior instructions
+  chatId: string | null; // dedicated chat session (created lazily)
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CronJob {
+  _id: string;           // nanoid
+  name: string;          // "Daily Israel News"
+  instruction: string;   // what the AI does when triggered
+  cronExpression: string; // "0 21 * * *"
+  timezone: string;      // IANA timezone from settings
+  enabled: boolean;
+  chatId: string;        // dedicated chat for execution results
+  lastRunAt: Date | null;
+  nextRunAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}

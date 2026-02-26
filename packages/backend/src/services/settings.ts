@@ -1,6 +1,4 @@
-import { db } from '../db/index.js';
-import { settings } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { settingsCol } from '../db/index.js';
 import { encrypt, decrypt } from './encryption.js';
 
 export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
@@ -18,6 +16,25 @@ export interface ToolSettings {
   braveSearch: { enabled: boolean; apiKey: string };
 }
 
+export interface QuietHoursRange {
+  start: string;  // "HH:mm" 24h format
+  end: string;    // "HH:mm" 24h format
+}
+
+export type PulseInterval = 48 | 24 | 12 | 6 | 2;
+
+export interface PulseSettings {
+  enabled: boolean;
+  activeDays: number[];          // 0=Sun..6=Sat
+  pulsesPerDay: PulseInterval;   // 48, 24, 12, 6, or 2
+  quietHours: QuietHoursRange[];
+  chatId: string | null;         // dedicated pulse chat (created on first pulse)
+  notes: string;                 // AI-maintained continuity notes (max 2000 chars)
+  lastPulseAt: string | null;    // ISO string
+  pulsesToday: number;           // reset at midnight in user's timezone
+  todayDate: string | null;      // "YYYY-MM-DD" for day-boundary detection
+}
+
 export interface AppSettings {
   primaryModel: ModelWithThinking;
   fallbackModels: ModelWithThinking[];
@@ -29,6 +46,7 @@ export interface AppSettings {
   };
   timezone: string;
   tools: ToolSettings;
+  pulse: PulseSettings;
 }
 
 const DEFAULTS: AppSettings = {
@@ -39,6 +57,17 @@ const DEFAULTS: AppSettings = {
   apiKeys: { gemini: { apiKey: '' }, openai: { apiKey: '' } },
   timezone: 'UTC',
   tools: { braveSearch: { enabled: false, apiKey: '' } },
+  pulse: {
+    enabled: false,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
+    pulsesPerDay: 12 as PulseInterval,
+    quietHours: [{ start: '23:00', end: '07:00' }],
+    chatId: null,
+    notes: '',
+    lastPulseAt: null,
+    pulsesToday: 0,
+    todayDate: null,
+  },
 };
 
 // Old format types for migration detection
@@ -97,19 +126,17 @@ function migrateOldToNew(old: OldAppSettings): AppSettings {
     },
     timezone: old.timezone || 'UTC',
     tools: { braveSearch: { enabled: false, apiKey: '' } },
+    pulse: structuredClone(DEFAULTS.pulse),
   };
 }
 
 async function getSetting(key: string): Promise<string | null> {
-  const row = db.select().from(settings).where(eq(settings.key, key)).get();
+  const row = await settingsCol.findOne({ _id: key });
   return row?.value ?? null;
 }
 
 async function setSetting(key: string, value: string): Promise<void> {
-  db.insert(settings)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: settings.key, set: { value } })
-    .run();
+  await settingsCol.updateOne({ _id: key }, { $set: { value } }, { upsert: true });
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -132,6 +159,9 @@ export async function getSettings(): Promise<AppSettings> {
     if (!result.tools) {
       result.tools = structuredClone(DEFAULTS.tools);
     }
+    if (!result.pulse) {
+      result.pulse = structuredClone(DEFAULTS.pulse);
+    }
     return result;
   } catch {
     return structuredClone(DEFAULTS);
@@ -142,6 +172,7 @@ export async function updateSettings(partial: Partial<AppSettings>): Promise<App
   const current = await getSettings();
 
   const currentTools = current.tools ?? DEFAULTS.tools;
+  const currentPulse = current.pulse ?? DEFAULTS.pulse;
 
   const updated: AppSettings = {
     primaryModel: partial.primaryModel ?? current.primaryModel,
@@ -158,6 +189,17 @@ export async function updateSettings(partial: Partial<AppSettings>): Promise<App
         enabled: partial.tools?.braveSearch?.enabled ?? currentTools.braveSearch.enabled,
         apiKey: currentTools.braveSearch.apiKey,
       },
+    },
+    pulse: {
+      enabled: partial.pulse?.enabled ?? currentPulse.enabled,
+      activeDays: partial.pulse?.activeDays ?? currentPulse.activeDays,
+      pulsesPerDay: partial.pulse?.pulsesPerDay ?? currentPulse.pulsesPerDay,
+      quietHours: partial.pulse?.quietHours ?? currentPulse.quietHours,
+      chatId: partial.pulse?.chatId !== undefined ? partial.pulse.chatId : currentPulse.chatId,
+      notes: partial.pulse?.notes !== undefined ? partial.pulse.notes : currentPulse.notes,
+      lastPulseAt: partial.pulse?.lastPulseAt !== undefined ? partial.pulse.lastPulseAt : currentPulse.lastPulseAt,
+      pulsesToday: partial.pulse?.pulsesToday !== undefined ? partial.pulse.pulsesToday : currentPulse.pulsesToday,
+      todayDate: partial.pulse?.todayDate !== undefined ? partial.pulse.todayDate : currentPulse.todayDate,
     },
   };
 
@@ -182,7 +224,7 @@ export async function updateSettings(partial: Partial<AppSettings>): Promise<App
   }
 
   await setSetting('app_settings', JSON.stringify(toStore));
-  return updated;
+  return getDecryptedSettings();
 }
 
 export async function getDecryptedSettings(): Promise<AppSettings> {
@@ -208,6 +250,9 @@ export async function getDecryptedSettings(): Promise<AppSettings> {
     // Ensure tools defaults exist for older stored settings
     if (!parsed.tools) {
       parsed.tools = structuredClone(DEFAULTS.tools);
+    }
+    if (!parsed.pulse) {
+      parsed.pulse = structuredClone(DEFAULTS.pulse);
     }
     // Decrypt API keys
     if (parsed.apiKeys?.gemini?.apiKey) {

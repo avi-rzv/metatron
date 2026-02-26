@@ -1,7 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { db } from '../db/index.js';
-import { attachments } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { attachmentsCol } from '../db/index.js';
 import { join } from 'path';
 import { unlink, stat } from 'fs/promises';
 import { createReadStream, existsSync } from 'fs';
@@ -11,7 +9,7 @@ const UPLOADS_DIR = './data/uploads';
 export async function uploadRoutes(fastify: FastifyInstance) {
   // GET /api/uploads/:id/file — serve uploaded file
   fastify.get<{ Params: { id: string } }>('/api/uploads/:id/file', async (req, reply) => {
-    const row = db.select().from(attachments).where(eq(attachments.id, req.params.id)).get();
+    const row = await attachmentsCol.findOne({ _id: req.params.id });
     if (!row) {
       reply.status(404).send({ error: 'Attachment not found' });
       return;
@@ -50,7 +48,7 @@ export async function uploadRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/uploads/:id — delete uploaded file
   fastify.delete<{ Params: { id: string } }>('/api/uploads/:id', async (req, reply) => {
-    const row = db.select().from(attachments).where(eq(attachments.id, req.params.id)).get();
+    const row = await attachmentsCol.findOne({ _id: req.params.id });
     if (!row) {
       reply.status(404).send({ error: 'Attachment not found' });
       return;
@@ -63,7 +61,7 @@ export async function uploadRoutes(fastify: FastifyInstance) {
       // File may already be gone — continue with DB cleanup
     }
 
-    db.delete(attachments).where(eq(attachments.id, req.params.id)).run();
+    await attachmentsCol.deleteOne({ _id: req.params.id });
     reply.status(204).send();
   });
 }

@@ -11,6 +11,12 @@ import { systemInstructionRoutes } from './routes/systemInstruction.js';
 import { mediaRoutes } from './routes/media.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { voiceRoutes } from './routes/voice.js';
+import { whatsappRoutes } from './routes/whatsapp.js';
+import { whatsappPermissionRoutes } from './routes/whatsappPermissions.js';
+import { cronjobRoutes } from './routes/cronjobs.js';
+import { initWhatsAppAutoReply } from './services/whatsappAutoReply.js';
+import { initCronService } from './services/cronService.js';
+import { initPulseService } from './services/pulseService.js';
 import multipart from '@fastify/multipart';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +47,18 @@ await fastify.register(systemInstructionRoutes);
 await fastify.register(mediaRoutes);
 await fastify.register(uploadRoutes);
 await fastify.register(voiceRoutes);
+await fastify.register(whatsappRoutes);
+await fastify.register(whatsappPermissionRoutes);
+await fastify.register(cronjobRoutes);
+
+// Initialize WhatsApp auto-reply service
+initWhatsAppAutoReply();
+
+// Initialize cron service
+await initCronService();
+
+// Initialize pulse service
+await initPulseService();
 
 // Health check
 fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

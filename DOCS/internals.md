@@ -1,112 +1,99 @@
 # Backend Internals
 
-This document covers implementation details that are not obvious from reading the source files in isolation: the database bootstrapping strategy, the encryption wire format, the settings storage model, and the LLM adapter contracts.
+This document covers implementation details that are not obvious from reading the source files in isolation: the database setup, the encryption wire format, the settings storage model, and the LLM adapter contracts.
 
 ## Database
 
 ### Connection and configuration (`src/db/index.ts`)
 
-The SQLite file path comes from `DATABASE_URL`. The directory is created with `mkdir -p` semantics before the connection is opened, so a missing `./data/` directory never causes a startup failure.
+MongoDB connection is established on module import via top-level `await`. The URI and database name come from environment variables:
 
-Two exports are provided:
+| Variable | Default |
+|----------|---------|
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017` |
+| `MONGODB_DB` | `metatron` |
+
+Ten typed collection accessors are exported — five core application collections, four AI-managed collections, and one WhatsApp-specific collection:
 
 ```typescript
-export const sqlite: DatabaseType  // raw better-sqlite3 instance
-export const db                    // Drizzle ORM instance wrapping sqlite
+// Core application collections
+export const chatsCol: Collection<Chat>
+export const messagesCol: Collection<Message>
+export const settingsCol: Collection<Setting>
+export const mediaCol: Collection<MediaDoc>
+export const attachmentsCol: Collection<AttachmentDoc>
+
+// AI-managed collections
+export const masterCol: Collection<Master>
+export const contactsCol: Collection<Contact>
+export const scheduleCol: Collection<ScheduleEvent>
+export const cronjobsCol: Collection<CronJob>
+
+// WhatsApp permission collection
+export const waPermissionsCol: Collection<WhatsAppPermission>
 ```
 
-`sqlite` is used by `src/services/aiTools.ts` to execute arbitrary AI-generated SQL statements. All other application code should use `db` (Drizzle) for type-safe queries scoped to the known schema tables.
+The raw `client` and `database` objects are also exported — `database` is used by `src/services/mongoValidator.ts` to execute AI-generated operations against arbitrary collections, while application code should always use the typed collection accessors.
 
-Two pragmas are set immediately after opening:
+Indexes are created on startup via `createIndex()` calls (idempotent — no error if they already exist). See `DOCS/database.md` for the full index list.
 
-- `journal_mode = WAL` — Write-Ahead Logging allows concurrent reads during a write. With a single-user system the concurrency benefit is minimal, but WAL also improves write throughput on spinning disks.
-- `foreign_keys = ON` — SQLite disables foreign key enforcement by default. This pragma must be set per connection. Without it, `DELETE FROM chats` would leave orphaned message rows.
-
-### Schema bootstrap
-
-The backend does not use Drizzle migrations on startup. Instead, `src/db/index.ts` executes `CREATE TABLE IF NOT EXISTS` DDL for all three tables directly via `better-sqlite3`. This means:
-
-- First run creates the tables automatically, no manual step required
-- Subsequent runs are idempotent — the `IF NOT EXISTS` guard is a no-op
-- Schema changes (adding columns, etc.) are **not** handled by this DDL — they require a migration
-
-For schema evolution, use drizzle-kit:
-```bash
-# from packages/backend/
-npm run db:generate   # writes migration SQL to packages/backend/drizzle/
-npm run db:migrate    # applies pending migrations to the live DB
-```
-
-The `drizzle.config.ts` points drizzle-kit at `src/db/schema.ts` and uses the same `DATABASE_URL` env var as the runtime server.
+Graceful shutdown handlers on `SIGINT` and `SIGTERM` call `client.close()`.
 
 ### Schema
 
-Three tables:
+Document interfaces are defined in `src/db/schema.ts` as plain TypeScript interfaces. All `_id` fields use nanoid strings (not MongoDB ObjectId). See `DOCS/database.md` for full interface definitions.
 
-**`chats`**
-```
-id          TEXT PRIMARY KEY          -- nanoid
-title       TEXT NOT NULL DEFAULT 'New Chat'
-provider    TEXT NOT NULL DEFAULT 'gemini'
-model       TEXT NOT NULL
-created_at  INTEGER NOT NULL          -- Unix timestamp (ms), stored via Drizzle mode: 'timestamp'
-updated_at  INTEGER NOT NULL
-```
+Ten collections in total. Five core application collections: `chats`, `messages`, `settings`, `media`, `attachments`. Four AI-managed collections: `master`, `contacts`, `schedule`, `cronjobs`. One WhatsApp-specific collection: `whatsapp_permissions`.
 
-**`messages`**
-```
-id          TEXT PRIMARY KEY
-chat_id     TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE
-role        TEXT NOT NULL             -- 'user' | 'assistant'
-content     TEXT NOT NULL
-created_at  INTEGER NOT NULL
-```
+`chats.updatedAt` is updated on every message insertion via explicit `updateOne()` calls in the route handler — there are no automatic timestamp triggers. If you add a route that creates or modifies a chat, remember to update `updatedAt` manually.
 
-**`settings`**
-```
-key         TEXT PRIMARY KEY
-value       TEXT NOT NULL
-```
+### ID mapping
 
-`chats.updated_at` is updated on every message insertion via explicit `db.update()` calls in the route handler — Drizzle does not have automatic timestamp triggers. If you add a route that creates or modifies a chat, remember to update `updatedAt` manually.
+MongoDB documents use `_id` as the primary key, but the frontend API expects `id`. The `toApiDoc()` and `toApiDocs()` helpers in `src/db/utils.ts` handle this conversion. All route handlers call these before returning documents.
 
-### Drizzle ORM usage pattern
+### Cascading deletes
 
-The `db` export from `src/db/index.ts` is a Drizzle instance. All queries use the Drizzle query builder. Because `better-sqlite3` is synchronous, Drizzle's better-sqlite3 adapter returns results synchronously even though the method signatures are async-compatible.
+MongoDB has no foreign key constraints. Application-level cascading deletes are implemented in `src/db/cascade.ts`:
 
-Common patterns used in the codebase:
+- `deleteChat(chatId)` — deletes the chat, all its messages, media (with files), attachments (with files), and any linked cronjobs (unscheduled and deleted). Also checks if the deleted chat is the pulse chat and clears `pulse.chatId` in settings if so (the next pulse will create a fresh chat).
+- `deleteCronJob(jobId)` — unschedules the job, deletes the cronjob document, then cascade-deletes the dedicated chat. Uses a deferred registration pattern (`registerCronUnschedule()`) to break the circular import between `cascade.ts` and `cronService.ts`.
+- `deleteMessage(messageId)` — deletes the message and its media and attachments (with files)
+
+Two deferred registration functions break circular imports:
+- `registerCronUnschedule(fn)` — called by `cronService.ts` at startup
+- `registerPulseChatCleanup(fn)` — called by `pulseService.ts` at startup
+
+All delete functions remove disk files in parallel and silently ignore missing files.
+
+### Common query patterns
+
+All queries are async (unlike the previous SQLite/Drizzle setup which was synchronous):
 
 ```typescript
 // Select all, ordered
-db.select().from(chats).orderBy(desc(chats.updatedAt)).all()
+await chatsCol.find().sort({ updatedAt: -1 }).toArray()
 
-// Select one or undefined
-db.select().from(chats).where(eq(chats.id, id)).get()
+// Select one or null
+await chatsCol.findOne({ _id: id })
 
 // Insert
-db.insert(messages).values({ id, chatId, role, content, createdAt }).run()
+await messagesCol.insertOne({ _id: nanoid(), chatId, role, content, citations: null, createdAt: new Date() })
 
 // Upsert (used for settings)
-db.insert(settings)
-  .values({ key, value })
-  .onConflictDoUpdate({ target: settings.key, set: { value } })
-  .run()
+await settingsCol.updateOne({ _id: key }, { $set: { value } }, { upsert: true })
 
 // Update
-db.update(chats)
-  .set({ title, updatedAt: new Date() })
-  .where(eq(chats.id, id))
-  .run()
+await chatsCol.updateOne({ _id: id }, { $set: { title, updatedAt: new Date() } })
 
 // Delete
-db.delete(chats).where(eq(chats.id, id)).run()
+await chatsCol.deleteOne({ _id: id })
 ```
 
 ---
 
 ## Encryption (`src/services/encryption.ts`)
 
-API keys are encrypted before being written to the database and decrypted when the LLM service needs to make a request. Encryption is never applied at the transport layer (that is TLS's job) — it protects data at rest in the SQLite file.
+API keys are encrypted before being written to the database and decrypted when the LLM service needs to make a request. Encryption is never applied at the transport layer (that is TLS's job) — it protects data at rest in the MongoDB database.
 
 ### Algorithm
 
@@ -155,7 +142,7 @@ If the key is 8 characters or shorter, the entire key is replaced with `"••�
 
 ## Settings service (`src/services/settings.ts`)
 
-Settings are stored as a single serialised JSON object under the key `'app_settings'` in the `settings` table. There is one row, one key, one value — no per-field rows.
+Settings are stored as a single serialised JSON object under the `_id` of `'app_settings'` in the `settings` collection. There is one document, one key, one value — no per-field documents.
 
 ### Stored vs. returned representation
 
@@ -179,53 +166,111 @@ If a stored API key fails decryption (e.g., `ENCRYPTION_SECRET` was rotated), `g
 
 ```typescript
 const DEFAULTS: AppSettings = {
-  gemini: {
-    apiKey: '',
-    defaultModel: 'gemini-3-pro-preview',
-    thinkingLevel: 'MEDIUM',
-    imageModel: 'gemini-3-pro-image-preview',
-  },
-  openai: {
-    apiKey: '',
-    defaultModel: 'gpt-5.2',
-    reasoningEffort: 'medium',
-    imageModel: 'gpt-image-1',
+  primaryModel: { modelId: 'gemini-3.1-pro-preview', thinkingLevel: 'medium' },
+  fallbackModels: [],
+  primaryImageModel: 'gemini-3-pro-image-preview',
+  fallbackImageModels: [],
+  apiKeys: { gemini: { apiKey: '' }, openai: { apiKey: '' } },
+  timezone: 'UTC',
+  tools: { braveSearch: { enabled: false, apiKey: '' } },
+  pulse: {
+    enabled: false,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
+    pulsesPerDay: 12,
+    quietHours: [{ start: '23:00', end: '07:00' }],
+    chatId: null,
+    notes: '',
+    lastPulseAt: null,
+    pulsesToday: 0,
+    todayDate: null,
   },
 };
 ```
 
-These are returned when the `app_settings` key does not exist (first run) or when the stored JSON cannot be parsed.
+These are returned when the `app_settings` document does not exist (first run) or when the stored JSON cannot be parsed.
 
 ### Partial update merge
 
-`updateSettings(partial)` performs a shallow merge per provider:
-
-```typescript
-const updated = {
-  gemini: { ...current.gemini, ...(partial.gemini ?? {}) },
-  openai: { ...current.openai, ...(partial.openai ?? {}) },
-};
-```
-
-This means you can update `defaultModel` for gemini without touching `apiKey`, and vice versa. However, if you send `partial.gemini = { apiKey: "" }`, the other gemini fields will **not** be cleared — they retain their current values from the merge.
+`updateSettings(partial)` performs a shallow merge over the current settings. You can update individual fields without affecting others. API key handling is special: only newly provided keys are encrypted; existing keys are preserved as-is from the current stored value. The `pulse` sub-object is merged field-by-field (same pattern as `tools`) — omitted pulse fields retain their current values.
 
 ---
 
 ## System instruction service (`src/services/systemInstruction.ts`)
 
-Stores the AI's combined system prompt configuration as a JSON blob in the `settings` table under the key `system_instruction`. See `DOCS/ai-tools.md` for full coverage. Key points relevant to the internals:
+Stores the AI's combined system prompt configuration as a JSON blob in the `settings` collection under the `_id` `'system_instruction'`. See `DOCS/ai-tools.md` for full coverage. Key points relevant to the internals:
 
+- `getRaw()` and `setRaw()` are now `async` functions that use `settingsCol.findOne()` and `settingsCol.updateOne()` with upsert
 - `buildCombinedPrompt()` returns `null` when `coreInstruction` is blank — the adapters treat a null system instruction as "don't set a system prompt".
 - `updateMemory()` enforces a hard 4,000-character limit before calling `updateSystemInstruction()`. This is the only field with a size constraint.
 - All writes stamp `updatedAt` with `new Date().toISOString()` server-side; the client never provides this field.
 
 ## AI tool callbacks (`src/services/aiTools.ts`)
 
-Provides `createAIToolCallbacks()` which returns the three tool implementations (`saveMemory`, `dbQuery`, `updateDbSchema`). All methods return JSON strings (the serialised result fed back to the LLM). `dbQuery` uses the raw `sqlite` export from `src/db/index.ts` to execute arbitrary SQL, guarded by `validateAIQuery()`. See `DOCS/ai-tools.md` for full coverage.
+Provides `createAIToolCallbacks()` which returns an `AIToolCallbacks` object used by both LLM adapters. The five core callbacks (`saveMemory`, `dbQuery`, `updateDbSchema`, `manageCronjob`, `managePulse`) are always included. Optional callbacks are conditionally added based on runtime state:
 
-## SQL validator (`src/services/sqlValidator.ts`)
+- `webSearch` — added when a Brave Search API key is present in settings
+- `generateImage` / `editImage` — added when an image model is configured and `chatId`/`messageId` context is provided
+- `whatsappReadMessages` / `whatsappSendMessage` / `whatsappManagePermission` / `whatsappListPermissions` — added when `whatsapp.status === 'connected'`; `whatsappReadMessages` and `whatsappSendMessage` enforce contact-level permissions against `whatsapp_permissions`
 
-Single exported function `validateAIQuery(sql)`. Tests the SQL string against word-boundary regexes for each of the three protected table names (`chats`, `messages`, `settings`). Returns `{ valid: true }` or `{ valid: false, error: string }`. The check is intentionally simple — it uses a regex against the raw SQL text rather than parsing an AST, which is an accepted trade-off in a single-user trusted environment.
+The `manageCronjob` callback delegates to the CRUD functions in `src/services/cronService.ts` and supports five actions: `create`, `list`, `update`, `delete`, `toggle`. The `managePulse` callback delegates to `src/services/pulseService.ts` and supports three actions: `update_notes`, `get_config`, `update_config`.
+
+All callbacks return JSON strings (the serialised result fed back to the LLM). `dbQuery` accepts a structured `MongoOperation` object and delegates to `executeAIOperation()` from `src/services/mongoValidator.ts`. See `DOCS/ai-tools.md` for full coverage and `DOCS/whatsapp.md` for WhatsApp-specific details.
+
+## MongoDB validator (`src/services/mongoValidator.ts`)
+
+`validateMongoOperation(op)` checks a structured MongoDB operation against a whitelist of allowed operations and enforces access control on protected collections. `executeAIOperation(op)` validates and then executes the operation against the database.
+
+Three access tiers are enforced: protected core collections (`chats`, `messages`, `settings`, `media`, `attachments`) are read-only for AI; AI-managed collections (`master`, `contacts`, `schedule`, `cronjobs`) allow full read/write without a prefix; all other write operations require the `ai_` prefix. See `DOCS/ai-tools.md` for the full access control rules.
+
+---
+
+## Pulse service (`src/services/pulseService.ts`)
+
+The Pulse service implements an autonomous heartbeat that periodically wakes the AI to review data, organize information, and take proactive actions without user interaction.
+
+### Architecture
+
+Unlike cronjobs (which use `node-cron` with arbitrary cron expressions), Pulse uses a simple 60-second `setInterval` tick loop. Each tick re-reads settings from the database and checks whether a pulse should fire. This design means settings changes take effect within 60 seconds without re-scheduling.
+
+### Tick loop
+
+1. Every 60 seconds, the tick handler reads `AppSettings` from the database
+2. `shouldPulseNow(settings)` checks: enabled, active day (in user's timezone), not in quiet hours, and enough time elapsed since last pulse
+3. If conditions are met, the pulse execution is queued in an `AsyncQueue` (same serial-execution pattern as `cronService.ts`)
+
+### Pulse execution
+
+`executePulse()` mirrors the `executeCronJob()` pattern:
+
+1. Re-reads settings from DB (guards against stale queue entries)
+2. Re-checks `shouldPulseNow()`
+3. Gets or creates a dedicated "Pulse" chat (recreates if deleted)
+4. Resets `pulsesToday` counter if the date has changed (user's timezone)
+5. Inserts a hardcoded pulse instruction as a user message (includes the AI's continuity notes)
+6. Loads last 20 messages for context
+7. Builds system prompt via `buildPulsePrompt()` (wraps `buildCombinedPrompt()` with pulse-specific context)
+8. Streams LLM response with full tool access
+9. Updates `lastPulseAt`, increments `pulsesToday`, persists to settings
+10. 180-second LLM timeout (longer than cron's 120s — pulses may do more work)
+
+### Quiet hours
+
+`isInQuietHours()` handles overnight ranges (e.g. 23:00→07:00): if `start > end`, the range wraps around midnight.
+
+### No new collection
+
+Pulse configuration lives in `AppSettings.pulse` — no separate MongoDB collection. Execution history is stored as messages in the dedicated pulse chat. The AI's continuity notes are in `pulse.notes`.
+
+### Exported functions
+
+| Function | Description |
+|----------|-------------|
+| `initPulseService()` | Starts the 60s tick loop and registers cascade cleanup |
+| `stopPulseService()` | Clears the interval |
+| `updatePulseSettings(partial)` | Updates only pulse fields in settings |
+| `getPulseSettings()` | Returns current `PulseSettings` |
+| `updatePulseNotes(notes)` | Saves notes (truncated to 2,000 chars) |
+| `getPulseInfo(settings)` | Returns `{ remaining, nextPulseAt, intervalMinutes }` |
 
 ---
 
@@ -249,6 +294,8 @@ interface StreamOptions {
 ```
 
 Both functions are `async` but the route handler does **not** `await` them — it fires them and immediately begins writing SSE. The `onChunk`, `onDone`, and `onError` callbacks write to `reply.raw` (the Node.js `http.ServerResponse`). This is intentional: Fastify's reply is passed to the underlying response before the adapter finishes, and the SSE write path bypasses Fastify's serialisation layer.
+
+**Important**: The `onDone` and `onError` callbacks in `src/routes/chats.ts` are now `async` functions because they perform `await` MongoDB operations (updating or deleting the assistant message). The LLM adapters must handle async callbacks properly.
 
 ### Gemini adapter
 
@@ -297,10 +344,15 @@ Fastify is instantiated with:
 
 Plugins and routes are registered with `await fastify.register(...)`. Fastify 5 requires awaiting plugin registration — missing `await` causes routes to not be registered before the server starts listening.
 
-Three route modules are registered: `chatRoutes`, `settingsRoutes`, and `systemInstructionRoutes`.
+Nine route modules are registered: `chatRoutes`, `settingsRoutes`, `systemInstructionRoutes`, `mediaRoutes`, `uploadRoutes`, `voiceRoutes`, `whatsappRoutes`, `whatsappPermissionRoutes`, and `cronjobRoutes`.
+
+After route registration, three background services are initialised:
+1. `initWhatsAppAutoReply()` from `src/services/whatsappAutoReply.ts` — registers a listener on the WhatsApp service's `message` event and starts the serial auto-reply queue. See `DOCS/whatsapp.md` for the full auto-reply service documentation.
+2. `initCronService()` from `src/services/cronService.ts` — loads all enabled cronjobs from the database, schedules them with `node-cron`, and registers the unschedule callback with the cascade module. Logs the number of jobs scheduled on startup.
+3. `initPulseService()` from `src/services/pulseService.ts` — starts a 60-second tick loop that checks whether a pulse should fire, and registers the pulse chat cleanup callback with the cascade module.
 
 In production (`NODE_ENV !== 'development'`), `@fastify/static` is registered to serve the built frontend from `packages/frontend/dist/`. A `setNotFoundHandler` SPA fallback serves `index.html` for any route not matched by the API, enabling React Router's client-side routing.
 
 The server binds to `HOST:PORT`. `HOST` defaults to `0.0.0.0` (all interfaces), which is correct for a containerised deployment where the Docker port mapping controls external access.
 
-Any startup error (plugin registration failure, port already in use, etc.) is logged and the process exits with code `1` — there is no retry logic.
+Any startup error (plugin registration failure, port already in use, MongoDB connection failure, etc.) is logged and the process exits with code `1` — there is no retry logic.
