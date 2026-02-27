@@ -186,7 +186,7 @@ export interface WhatsAppGroupPermission {
 }
 
 export interface WhatsAppGroup {
-  id: string;
+  jid: string;
   name: string;
-  participants: number;
+  participantCount: number;
 }

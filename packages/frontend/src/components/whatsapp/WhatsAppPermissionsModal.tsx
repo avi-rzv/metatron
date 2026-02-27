@@ -100,7 +100,7 @@ export function WhatsAppPermissionsModal({ onClose }: Props) {
 
   // Filter groups not already in permissions
   const existingJids = new Set(groupPermissions.map((p: WhatsAppGroupPermission) => p.groupJid));
-  const addableGroups = availableGroups.filter(g => !existingJids.has(g.id));
+  const addableGroups = availableGroups.filter(g => !existingJids.has(g.jid));
 
   const handleDeleteConfirm = () => {
     if (!confirmDeleteId) return;
@@ -326,14 +326,14 @@ export function WhatsAppPermissionsModal({ onClose }: Props) {
                     ) : (
                       addableGroups.map((group) => (
                         <button
-                          key={group.id}
-                          onClick={() => createGroupMutation.mutate({ groupJid: group.id, groupName: group.name })}
+                          key={group.jid}
+                          onClick={() => createGroupMutation.mutate({ groupJid: group.jid, groupName: group.name })}
                           disabled={createGroupMutation.isPending}
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-all duration-150 text-start"
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 truncate">{group.name}</p>
-                            <p className="text-xs text-gray-400">{group.participants} {t.whatsapp.groupParticipants}</p>
+                            <p className="text-xs text-gray-400">{group.participantCount} {t.whatsapp.groupParticipants}</p>
                           </div>
                           <FontAwesomeIcon icon={faPlus} className="text-xs text-gray-400" />
                         </button>
