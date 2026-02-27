@@ -192,7 +192,7 @@ export function WhatsAppPermissionsModal({ onClose }: Props) {
 
                   {/* Collapsible instructions editor */}
                   {editingInstructionsId === perm.id && (
-                    <div className="mt-1 ml-4 mr-4 rounded-xl border border-gray-100 bg-white p-3 space-y-2">
+                    <div className="mt-1 ms-4 me-4 rounded-xl border border-gray-100 bg-white p-3 space-y-2">
                       <label className="text-xs font-medium text-gray-500">{t.whatsapp.chatInstructions}</label>
                       <textarea
                         value={instructionsText}

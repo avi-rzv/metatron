@@ -292,7 +292,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               </div>
               <button
                 onClick={() => removeFile(i)}
-                className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+                className="ms-1 flex h-5 w-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors"
                 aria-label={t.chat.removeFile}
                 type="button"
               >

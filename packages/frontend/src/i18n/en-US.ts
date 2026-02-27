@@ -31,6 +31,7 @@ export const enUS = {
     send: 'Send message',
     copy: 'Copy',
     copied: 'Copied!',
+    messageCopied: 'Message copied',
     typeMessage: 'Type a message\u2026',
     attach: 'Attach file',
     selectModel: 'Select model',
@@ -65,6 +66,7 @@ export const enUS = {
     no: 'No',
     save: 'Save',
     cancel: 'Cancel',
+    download: 'Download',
   },
 
   modelSelector: {
@@ -106,6 +108,8 @@ export const enUS = {
     },
     noApiKey: 'Add an API key to use this provider',
     keySecured: 'Key stored securely (encrypted)',
+    hideKey: 'Hide key',
+    showKey: 'Show key',
   },
 
   systemInstruction: {
@@ -160,6 +164,9 @@ export const enUS = {
     deleteConfirm: 'Delete this image? This cannot be undone.',
     generatedWith: 'Generated with',
     downloadImage: 'Download image',
+    goToChat: 'Go to chat',
+    cancel: 'Cancel',
+    delete: 'Delete',
   },
 
   imageGen: {
@@ -236,6 +243,10 @@ export const enUS = {
     dayFri: 'Fri',
     daySat: 'Sat',
     daySun: 'Sun',
+    everyMinute: 'Every minute',
+    everyHourAt: 'Every hour at',
+    dailyAt: 'Daily at',
+    at: 'at',
   },
 
   pulse: {
@@ -260,6 +271,7 @@ export const enUS = {
     daySat: 'S',
     quietHours: 'Quiet Hours',
     quietHoursDescription: 'Pulses are suppressed during these times.',
+    quietHoursTo: 'to',
     addRange: 'Add range',
     removeRange: 'Remove',
     status: 'Status',
@@ -275,11 +287,20 @@ export const enUS = {
   settings: {
     title: 'Settings',
     subtitle: 'Customize your preferences',
+    language: 'Language',
+    languageDescription: 'Choose your preferred language.',
     timezone: 'Time Zone',
     timezoneDescription: 'Choose your local time zone.',
+    searchTimezone: 'Search timezone\u2026',
+    detected: 'Detected',
     save: 'Save',
     saving: 'Saving\u2026',
     saved: 'Saved!',
+  },
+
+  audio: {
+    play: 'Play',
+    pause: 'Pause',
   },
 
   errors: {
@@ -289,4 +310,9 @@ export const enUS = {
   },
 } as const;
 
-export type Strings = typeof enUS;
+/** Recursively widen string literals to `string` so translations can differ */
+type DeepString<T> = {
+  [K in keyof T]: T[K] extends string ? string : DeepString<T[K]>;
+};
+
+export type Strings = DeepString<typeof enUS>;

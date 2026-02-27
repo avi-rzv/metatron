@@ -40,7 +40,7 @@ function CopyButton({ text }: { text: string }) {
       document.body.removeChild(el);
     }
     setCopied(true);
-    showToast('Message copied');
+    showToast(t.chat.messageCopied);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -168,7 +168,7 @@ function AttachmentPreviews({ items }: { items: Attachment[] }) {
                 </button>
                 <button
                   onClick={() => handleDelete(att)}
-                  className="absolute top-1 right-1 hidden group-hover/att:flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
+                  className="absolute top-1 end-1 hidden group-hover/att:flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
                   aria-label={t.chat.deleteAttachment}
                 >
                   <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
@@ -185,7 +185,7 @@ function AttachmentPreviews({ items }: { items: Attachment[] }) {
                 <audio controls src={url} className="h-8 w-[200px]" preload="metadata" />
                 <button
                   onClick={() => handleDelete(att)}
-                  className="absolute top-1 right-1 hidden group-hover/att:flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
+                  className="absolute top-1 end-1 hidden group-hover/att:flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
                   aria-label={t.chat.deleteAttachment}
                 >
                   <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
@@ -201,7 +201,7 @@ function AttachmentPreviews({ items }: { items: Attachment[] }) {
                 <video controls src={url} className="w-64 max-h-48" preload="metadata" />
                 <button
                   onClick={() => handleDelete(att)}
-                  className="absolute top-1 right-1 hidden group-hover/att:flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
+                  className="absolute top-1 end-1 hidden group-hover/att:flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
                   aria-label={t.chat.deleteAttachment}
                 >
                   <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
@@ -222,7 +222,7 @@ function AttachmentPreviews({ items }: { items: Attachment[] }) {
                 href={url}
                 download={att.originalName}
                 className="text-gray-400 hover:text-gray-700 transition-colors"
-                aria-label="Download"
+                aria-label={t.chat.download}
               >
                 <FontAwesomeIcon icon={faDownload} className="text-[10px]" />
               </a>
@@ -264,7 +264,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       return (
         <div className="group flex justify-end px-4 py-1">
           <div className="max-w-[75%]">
-            <div className="rounded-2xl rounded-tr-sm bg-gray-100 px-4 py-3">
+            <div className="rounded-2xl rounded-se-sm bg-gray-100 px-4 py-3">
               {audioSrc && <AudioPlayer src={audioSrc} />}
               {isTranscribing ? (
                 <p className="mt-2 text-xs italic text-gray-400 leading-relaxed animate-pulse">{t.chat.transcribing}</p>
@@ -284,7 +284,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
     return (
       <div className="group flex justify-end px-4 py-1">
         <div className="max-w-[75%]">
-          <div className="rounded-2xl rounded-tr-sm bg-gray-100 px-4 py-3 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
+          <div className="rounded-2xl rounded-se-sm bg-gray-100 px-4 py-3 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
             {message.content}
             {nonAudioAttachments.length > 0 && (
               <AttachmentPreviews items={nonAudioAttachments} />
@@ -329,7 +329,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
               },
               blockquote({ children }) {
                 return (
-                  <blockquote className="border-l-4 border-gray-200 pl-3 text-gray-500 italic my-2">
+                  <blockquote className="border-s-4 border-gray-200 ps-3 text-gray-500 italic my-2">
                     {children}
                   </blockquote>
                 );

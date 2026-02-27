@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
+import { t } from '@/i18n';
 
 interface AudioPlayerProps {
   src: string;
@@ -67,7 +68,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
       <button
         onClick={togglePlay}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-95 transition-all duration-150"
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? t.audio.pause : t.audio.play}
       >
         <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="text-xs" />
       </button>
@@ -78,7 +79,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
           onClick={handleSeek}
         >
           <div
-            className="absolute top-0 left-0 h-full rounded-full bg-black transition-[width] duration-100"
+            className="absolute top-0 start-0 h-full rounded-full bg-black transition-[width] duration-100"
             style={{ width: `${progress}%` }}
           />
         </div>

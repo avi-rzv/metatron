@@ -96,13 +96,13 @@ function cronToHuman(expr: string): string {
   };
 
   const dayNames: Record<string, string> = {
-    '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed',
-    '4': 'Thu', '5': 'Fri', '6': 'Sat', '7': 'Sun',
+    '0': t.schedule.daySun, '1': t.schedule.dayMon, '2': t.schedule.dayTue, '3': t.schedule.dayWed,
+    '4': t.schedule.dayThu, '5': t.schedule.dayFri, '6': t.schedule.daySat, '7': t.schedule.daySun,
   };
 
-  if (min === '*' && hour === '*') return 'Every minute';
-  if (min !== '*' && hour === '*' && dow === '*') return `Every hour at :${min.padStart(2, '0')}`;
-  if (min !== '*' && hour !== '*' && dow === '*') return `Daily at ${fmtTime(hour, min)}`;
+  if (min === '*' && hour === '*') return t.schedule.everyMinute;
+  if (min !== '*' && hour === '*' && dow === '*') return `${t.schedule.everyHourAt} :${min.padStart(2, '0')}`;
+  if (min !== '*' && hour !== '*' && dow === '*') return `${t.schedule.dailyAt} ${fmtTime(hour, min)}`;
   if (min !== '*' && hour !== '*' && dow !== '*') {
     const days = dow.split(',').map(d => {
       if (d.includes('-')) {
@@ -111,7 +111,7 @@ function cronToHuman(expr: string): string {
       }
       return dayNames[d] ?? d;
     }).join(', ');
-    return `${days} at ${fmtTime(hour, min)}`;
+    return `${days} ${t.schedule.at} ${fmtTime(hour, min)}`;
   }
 
   return expr;
@@ -295,7 +295,7 @@ export function SchedulePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    <FontAwesomeIcon icon={faClock} className="mr-1 text-gray-300" />
+                    <FontAwesomeIcon icon={faClock} className="me-1 text-gray-300" />
                     {cronToHuman(job.cronExpression)}
                   </p>
                 </div>

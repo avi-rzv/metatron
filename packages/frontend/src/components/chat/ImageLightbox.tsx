@@ -71,7 +71,7 @@ export function ImageLightbox({ media, onClose, onPrev, onNext, onDelete }: Imag
         {onPrev && (
           <button
             onClick={(e) => { e.stopPropagation(); onPrev(); }}
-            className="absolute -left-12 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-white text-black hover:bg-gray-200 transition-colors shadow-lg"
+            className="absolute -start-12 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-white text-black hover:bg-gray-200 transition-colors shadow-lg"
           >
             <FontAwesomeIcon icon={faChevronLeft} />
           </button>
@@ -81,13 +81,13 @@ export function ImageLightbox({ media, onClose, onPrev, onNext, onDelete }: Imag
         {onNext && (
           <button
             onClick={(e) => { e.stopPropagation(); onNext(); }}
-            className="absolute -right-12 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-white text-black hover:bg-gray-200 transition-colors shadow-lg"
+            className="absolute -end-12 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-white text-black hover:bg-gray-200 transition-colors shadow-lg"
           >
             <FontAwesomeIcon icon={faChevronRight} />
           </button>
         )}
         {/* Controls */}
-        <div className="absolute top-2 right-2 flex gap-2 z-10">
+        <div className="absolute top-2 end-2 flex gap-2 z-10">
           {onDelete && (
             <button
               onClick={() => setConfirmingDelete(true)}
@@ -137,7 +137,7 @@ export function ImageLightbox({ media, onClose, onPrev, onNext, onDelete }: Imag
                   onClick={() => setConfirmingDelete(false)}
                   className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
                 >
-                  Cancel
+                  {t.gallery.cancel}
                 </button>
                 <button
                   onClick={() => {
@@ -146,7 +146,7 @@ export function ImageLightbox({ media, onClose, onPrev, onNext, onDelete }: Imag
                   }}
                   className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-full transition-colors"
                 >
-                  Delete
+                  {t.gallery.delete}
                 </button>
               </div>
             </div>

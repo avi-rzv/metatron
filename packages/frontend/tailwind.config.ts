@@ -18,7 +18,7 @@ export default {
           to: { opacity: '1' },
         },
         slideIn: {
-          from: { transform: 'translateX(-8px)', opacity: '0' },
+          from: { transform: 'translateX(calc(-8px * var(--tw-dir, 1)))', opacity: '0' },
           to: { transform: 'translateX(0)', opacity: '1' },
         },
       },

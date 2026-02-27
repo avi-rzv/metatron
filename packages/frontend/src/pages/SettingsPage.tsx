@@ -5,7 +5,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faSpinner, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api } from '@/api';
 import { PageTopBar } from '@/components/layout/PageTopBar';
-import { t } from '@/i18n';
+import { t, locale, availableLocales, setLocale } from '@/i18n';
+import type { Locale } from '@/i18n';
 import type { PulseInterval, QuietHoursRange } from '@/types';
 
 // Detect user's local timezone
@@ -198,6 +199,32 @@ export function SettingsPage() {
       <div className="flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-6">
 
+        {/* Language Section */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-5">
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+              {t.settings.language}
+            </p>
+            <p className="mb-3 text-xs text-gray-400">{t.settings.languageDescription}</p>
+            <div className="flex gap-2">
+              {availableLocales.map((loc) => (
+                <button
+                  key={loc.id}
+                  onClick={() => setLocale(loc.id as Locale)}
+                  className={[
+                    'rounded-full px-4 py-2 text-sm font-medium transition-all duration-150',
+                    locale === loc.id
+                      ? 'bg-black text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                  ].join(' ')}
+                >
+                  {loc.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Timezone Section */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-5">
           <div>
@@ -217,7 +244,7 @@ export function SettingsPage() {
                   setIsOpen(true);
                 }}
                 onBlur={handleBlur}
-                placeholder="Search timezone…"
+                placeholder={t.settings.searchTimezone}
                 className="w-full rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-800 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
               />
               {isOpen && filtered.length > 0 && (
@@ -230,7 +257,7 @@ export function SettingsPage() {
                     >
                       <span>{option.label}</span>
                       {option.value === USER_TIMEZONE && (
-                        <span className="ml-2 text-xs text-gray-400">Detected</span>
+                        <span className="ms-2 text-xs text-gray-400">{t.settings.detected}</span>
                       )}
                     </li>
                   ))}
@@ -326,7 +353,7 @@ export function SettingsPage() {
                     onChange={(e) => updateQuietHour(idx, 'start', e.target.value)}
                     className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-gray-400"
                   />
-                  <span className="text-xs text-gray-400">to</span>
+                  <span className="text-xs text-gray-400">{t.pulse.quietHoursTo}</span>
                   <input
                     type="time"
                     value={qh.end}

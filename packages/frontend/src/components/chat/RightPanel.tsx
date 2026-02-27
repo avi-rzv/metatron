@@ -244,7 +244,7 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute right-0 top-7 z-50 w-36 rounded-lg border border-gray-100 bg-white py-1 shadow-lg">
+              <div className="absolute end-0 top-7 z-50 w-36 rounded-lg border border-gray-100 bg-white py-1 shadow-lg">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -297,7 +297,7 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
           <button
             onClick={() => setRightPanelOpen(false)}
             className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 active:scale-95 transition-all duration-150"
-            aria-label="Close"
+            aria-label={t.sidebar.close}
           >
             <FontAwesomeIcon icon={faXmark} className="text-sm text-gray-500" />
           </button>

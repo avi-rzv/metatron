@@ -55,7 +55,7 @@ export function ModelSelector({ provider, model, onChange }: ModelSelectorProps)
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 min-w-[220px] rounded-2xl border border-gray-100 bg-white shadow-xl animate-fade-in overflow-hidden">
+        <div className="absolute start-0 top-full z-50 mt-2 min-w-[220px] rounded-2xl border border-gray-100 bg-white shadow-xl animate-fade-in overflow-hidden">
           {groups.map((group, gi) => (
             <div key={group.provider}>
               {gi > 0 && <div className="mx-3 border-t border-gray-100" />}

@@ -73,14 +73,14 @@ export function GalleryPage() {
                 </div>
 
                 {/* Action buttons */}
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <div className="absolute top-2 end-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/chat/${m.chatId}`);
                     }}
                     className="flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors text-[10px]"
-                    title="Go to chat"
+                    title={t.gallery.goToChat}
                   >
                     &rarr;
                   </button>
@@ -111,13 +111,13 @@ export function GalleryPage() {
                 onClick={() => setDeleteConfirmId(null)}
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
               >
-                Cancel
+                {t.gallery.cancel}
               </button>
               <button
                 onClick={() => deleteMutation.mutate(deleteConfirmId)}
                 className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-full transition-colors"
               >
-                Delete
+                {t.gallery.delete}
               </button>
             </div>
           </div>

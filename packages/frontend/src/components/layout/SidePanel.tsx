@@ -44,9 +44,9 @@ export function SidePanel() {
 
       <aside
         className={[
-          'flex flex-col bg-white border-r border-gray-100 z-30 transition-all duration-200 ease-in-out',
+          'flex flex-col bg-white border-e border-gray-100 z-30 transition-all duration-200 ease-in-out',
           isMobile
-            ? `fixed left-0 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`
+            ? `fixed start-0 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`
             : `relative h-full ${collapsed ? 'w-16' : 'w-56'}`,
         ].join(' ')}
         style={isMobile ? { top: 'var(--vvt, 0px)', height: 'var(--vvh, 100dvh)' } : undefined}
@@ -60,7 +60,7 @@ export function SidePanel() {
           )}
           <button
             onClick={toggleSidebar}
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-black active:scale-95 transition-all duration-150"
+            className="ms-auto flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-black active:scale-95 transition-all duration-150"
             aria-label={sidebarOpen ? t.sidebar.close : t.sidebar.open}
           >
             <FontAwesomeIcon icon={sidebarOpen && isMobile ? faXmark : faBars} className="text-sm" />

@@ -183,7 +183,7 @@ function ApiKeyField({ value, onChange, placeholder, secured, maskedValue, revea
 
   return (
     <div className="relative flex items-center">
-      <FontAwesomeIcon icon={faKey} className="absolute left-3 text-gray-300 text-xs" />
+      <FontAwesomeIcon icon={faKey} className="absolute start-3 text-gray-300 text-xs" />
       {showingMasked ? (
         <input
           ref={inputRef}
@@ -191,7 +191,7 @@ function ApiKeyField({ value, onChange, placeholder, secured, maskedValue, revea
           value={show ? (revealedValue ?? maskedValue ?? '') : '***'}
           readOnly
           onClick={handleMaskedClick}
-          className="w-full cursor-pointer rounded-full border border-gray-200 bg-white py-2 pl-8 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
+          className="w-full cursor-pointer rounded-full border border-gray-200 bg-white py-2 ps-8 pe-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
         />
       ) : (
         <input
@@ -200,14 +200,14 @@ function ApiKeyField({ value, onChange, placeholder, secured, maskedValue, revea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder ?? t.modelManager.apiKeyPlaceholder}
-          className="w-full rounded-full border border-gray-200 bg-white py-2 pl-8 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
+          className="w-full rounded-full border border-gray-200 bg-white py-2 ps-8 pe-10 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-400 focus:shadow-sm transition-all duration-150"
         />
       )}
       <button
         type="button"
         onClick={handleToggleShow}
-        className="absolute right-3 text-gray-400 hover:text-gray-700 transition-colors duration-150"
-        aria-label={show ? 'Hide key' : 'Show key'}
+        className="absolute end-3 text-gray-400 hover:text-gray-700 transition-colors duration-150"
+        aria-label={show ? t.modelManager.hideKey : t.modelManager.showKey}
       >
         <FontAwesomeIcon icon={show ? faEyeSlash : faEye} className="text-xs" />
       </button>
