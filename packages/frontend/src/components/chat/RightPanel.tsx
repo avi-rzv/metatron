@@ -285,9 +285,9 @@ export function RightPanel({ currentProvider, currentModel }: RightPanelProps) {
       <div
         ref={ref}
         className={[
-          'fixed right-0 z-30 w-72 bg-white border-l border-gray-100 flex flex-col shadow-xl',
+          'fixed end-0 z-30 w-72 bg-white border-s border-gray-100 flex flex-col shadow-xl',
           'transition-transform duration-200 ease-in-out',
-          rightPanelOpen ? 'translate-x-0' : 'translate-x-full',
+          rightPanelOpen ? 'translate-x-0' : 'ltr:translate-x-full rtl:-translate-x-full',
         ].join(' ')}
         style={{ top: 'var(--vvt, 0px)', height: 'var(--vvh, 100dvh)' }}
       >
