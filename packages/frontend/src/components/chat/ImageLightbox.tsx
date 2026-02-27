@@ -73,7 +73,7 @@ export function ImageLightbox({ media, onClose, onPrev, onNext, onDelete }: Imag
             onClick={(e) => { e.stopPropagation(); onPrev(); }}
             className="absolute -start-12 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-white text-black hover:bg-gray-200 transition-colors shadow-lg"
           >
-            <FontAwesomeIcon icon={faChevronLeft} />
+            <FontAwesomeIcon icon={faChevronLeft} className="rtl:scale-x-[-1]" />
           </button>
         )}
 
@@ -83,7 +83,7 @@ export function ImageLightbox({ media, onClose, onPrev, onNext, onDelete }: Imag
             onClick={(e) => { e.stopPropagation(); onNext(); }}
             className="absolute -end-12 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-white text-black hover:bg-gray-200 transition-colors shadow-lg"
           >
-            <FontAwesomeIcon icon={faChevronRight} />
+            <FontAwesomeIcon icon={faChevronRight} className="rtl:scale-x-[-1]" />
           </button>
         )}
         {/* Controls */}

@@ -144,6 +144,7 @@ export function WhatsAppPermissionsModal({ onClose }: Props) {
                       <span className="text-[11px] text-gray-400">{t.whatsapp.readAccess}</span>
                       <button
                         onClick={() => updateMutation.mutate({ id: perm.id, data: { canRead: !perm.canRead } })}
+                        dir="ltr"
                         className={[
                           'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
                           perm.canRead ? 'bg-black' : 'bg-gray-200',
@@ -165,6 +166,7 @@ export function WhatsAppPermissionsModal({ onClose }: Props) {
                       <span className="text-[11px] text-gray-400">{t.whatsapp.replyAccess}</span>
                       <button
                         onClick={() => updateMutation.mutate({ id: perm.id, data: { canReply: !perm.canReply } })}
+                        dir="ltr"
                         className={[
                           'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
                           perm.canReply ? 'bg-black' : 'bg-gray-200',

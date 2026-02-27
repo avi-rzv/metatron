@@ -288,6 +288,7 @@ export function SettingsPage() {
             </div>
             <button
               onClick={() => setPulseEnabled(!pulseEnabled)}
+              dir="ltr"
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
                 pulseEnabled ? 'bg-black' : 'bg-gray-200'
               }`}

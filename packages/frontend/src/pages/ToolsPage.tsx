@@ -200,6 +200,7 @@ export function ToolsPage() {
             <button
               onClick={handleToggle}
               disabled={updateMutation.isPending}
+              dir="ltr"
               className={[
                 'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
                 isEnabled ? 'bg-black' : 'bg-gray-200',
