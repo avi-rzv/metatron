@@ -1,13 +1,13 @@
 import { whatsapp, type BufferedMessage } from './whatsapp.js';
-import { waPermissionsCol, chatsCol, messagesCol } from '../db/index.js';
+import { waPermissionsCol, waGroupPermissionsCol, chatsCol, messagesCol } from '../db/index.js';
 import { nanoid } from 'nanoid';
 import { getDecryptedSettings, getThinkingLevelForModel } from './settings.js';
-import { getSystemInstruction, buildWhatsAppPrompt } from './systemInstruction.js';
+import { getSystemInstruction, buildWhatsAppPrompt, buildWhatsAppGroupPrompt } from './systemInstruction.js';
 import { createAIToolCallbacks, type MediaInfo } from './aiTools.js';
 import { streamGeminiChat, type GeminiMessage } from './llm/gemini.js';
 import { streamOpenAIChat, type OpenAIMessage } from './llm/openai.js';
 import { processIncomingVoice, textToVoiceNote } from './whatsappAudio.js';
-import type { WhatsAppPermission } from '../db/schema.js';
+import type { WhatsAppPermission, WhatsAppGroupPermission } from '../db/schema.js';
 
 /**
  * Simple async queue that processes one message at a time.
@@ -63,6 +63,31 @@ async function getOrCreateContactChat(perm: WhatsAppPermission, settings: { prov
   return chatId;
 }
 
+/**
+ * Get or create a dedicated chat session for a WhatsApp group.
+ */
+async function getOrCreateGroupChat(perm: WhatsAppGroupPermission, settings: { provider: string; model: string }): Promise<string> {
+  if (perm.chatId) {
+    const existing = await chatsCol.findOne({ _id: perm.chatId });
+    if (existing) return perm.chatId;
+  }
+
+  const now = new Date();
+  const chatId = nanoid();
+  await chatsCol.insertOne({
+    _id: chatId,
+    title: `WhatsApp Group: ${perm.groupName}`,
+    provider: settings.provider,
+    model: settings.model,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await waGroupPermissionsCol.updateOne({ _id: perm._id }, { $set: { chatId, updatedAt: now } });
+
+  return chatId;
+}
+
 /** Timeout for LLM calls to prevent queue stalls (ms) */
 const LLM_TIMEOUT = 90_000; // 90 seconds
 
@@ -77,21 +102,26 @@ async function runLLM(opts: {
   contactId: string | null;
   phoneNumber: string;
   audioAttachment?: { mimeType: string; data: string };
+  systemInstructionOverride?: string | null;
 }): Promise<string> {
   const settings = await getDecryptedSettings();
   const sysInstr = await getSystemInstruction();
 
   // Build purpose-built WhatsApp system instruction
   let systemInstruction: string | null;
-  try {
-    systemInstruction = await buildWhatsAppPrompt({
-      contactId: opts.contactId,
-      phoneNumber: opts.phoneNumber,
-      displayName: opts.displayName,
-    });
-  } catch (err) {
-    console.error('[WhatsAppAutoReply] buildWhatsAppPrompt failed, using fallback:', err);
-    systemInstruction = `You are Metatron, a personal assistant. You are replying to a WhatsApp message from "${opts.displayName}". Be concise and helpful. Reply in the same language the contact writes in.`;
+  if (opts.systemInstructionOverride !== undefined) {
+    systemInstruction = opts.systemInstructionOverride;
+  } else {
+    try {
+      systemInstruction = await buildWhatsAppPrompt({
+        contactId: opts.contactId,
+        phoneNumber: opts.phoneNumber,
+        displayName: opts.displayName,
+      });
+    } catch (err) {
+      console.error('[WhatsAppAutoReply] buildWhatsAppPrompt failed, using fallback:', err);
+      systemInstruction = `You are Metatron, a personal assistant. You are replying to a WhatsApp message from "${opts.displayName}". Be concise and helpful. Reply in the same language the contact writes in.`;
+    }
   }
 
   // Determine model
@@ -265,9 +295,15 @@ async function runLLM(opts: {
 const queue = new AsyncQueue();
 
 async function processMessage(msg: BufferedMessage): Promise<void> {
-  // Skip own messages and group messages
-  if (msg.fromMe || msg.isGroup) return;
+  // Skip own messages
+  if (msg.fromMe) return;
 
+  // --- Group message handling ---
+  if (msg.isGroup) {
+    return processGroupMessage(msg);
+  }
+
+  // --- Contact (DM) message handling ---
   // Normalize sender phone number — strip @s.whatsapp.net suffix first, then non-digits
   const senderPhone = msg.from.replace(/@.*$/, '').replace(/[^0-9]/g, '');
   if (!senderPhone) return;
@@ -376,6 +412,85 @@ async function processMessage(msg: BufferedMessage): Promise<void> {
 
   // Release audio buffer after processing to free memory
   msg.audioBuffer = null;
+}
+
+async function processGroupMessage(msg: BufferedMessage): Promise<void> {
+  // Group JID is in msg.from for group messages
+  const groupJid = msg.from;
+  if (!groupJid?.includes('@g.us')) return;
+
+  // Look up group permissions
+  const groupPerm = await waGroupPermissionsCol.findOne({ groupJid });
+  if (!groupPerm) {
+    // No permission entry — silently skip
+    return;
+  }
+  if (!groupPerm.canRead) {
+    console.log(`[WhatsAppAutoReply] canRead=false for group ${groupPerm.groupName}, skipping`);
+    return;
+  }
+
+  const senderName = msg.fromName || 'Unknown';
+  console.log(`[WhatsAppAutoReply] Processing group message in ${groupPerm.groupName} from ${senderName}: "${msg.body.slice(0, 80)}"`);
+
+  // Get settings for model info
+  const settings = await getDecryptedSettings();
+  const modelId = settings.primaryModel.modelId;
+  const provider = modelId.startsWith('gemini') ? 'gemini' : 'openai';
+
+  const userText = `[${senderName}]: ${msg.body}`;
+
+  // Get or create dedicated chat session for the group
+  const chatId = await getOrCreateGroupChat(groupPerm, { provider, model: modelId });
+
+  // Save incoming message
+  await messagesCol.insertOne({
+    _id: nanoid(),
+    chatId,
+    role: 'user',
+    content: userText,
+    citations: null,
+    createdAt: new Date(msg.timestamp),
+  });
+
+  await chatsCol.updateOne({ _id: chatId }, { $set: { updatedAt: new Date() } });
+
+  // Build group-specific system prompt
+  let groupSystemInstruction: string | null;
+  try {
+    groupSystemInstruction = await buildWhatsAppGroupPrompt({
+      groupJid,
+      groupName: groupPerm.groupName,
+      senderName,
+    });
+  } catch (err) {
+    console.error('[WhatsAppAutoReply] buildWhatsAppGroupPrompt failed, using fallback:', err);
+    groupSystemInstruction = `You are Metatron, a personal assistant. You are in a WhatsApp group called "${groupPerm.groupName}". The latest message was sent by ${senderName}. Be concise and helpful. Reply in the same language the group writes in.`;
+  }
+
+  // Run LLM with group system instruction
+  const response = await runLLM({
+    chatId,
+    userText,
+    displayName: groupPerm.groupName,
+    contactId: null,
+    phoneNumber: groupJid,
+    systemInstructionOverride: groupSystemInstruction,
+  });
+
+  // If canReply and we got a response, send it to the group
+  if (groupPerm.canReply && response && whatsapp.status === 'connected') {
+    try {
+      await whatsapp.sendMessage(groupJid, response);
+      console.log(`[WhatsAppAutoReply] Replied in group ${groupPerm.groupName}: "${response.slice(0, 80)}"`);
+    } catch (err) {
+      console.error(`[WhatsAppAutoReply] Failed to send group reply to ${groupPerm.groupName}:`, err);
+    }
+  } else if (!groupPerm.canReply) {
+    console.log(`[WhatsAppAutoReply] canReply=false for group ${groupPerm.groupName}, message saved but no reply sent`);
+  } else if (!response) {
+    console.log(`[WhatsAppAutoReply] Empty LLM response for group ${groupPerm.groupName}, no reply sent`);
+  }
 }
 
 export function initWhatsAppAutoReply() {

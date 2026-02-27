@@ -1,4 +1,4 @@
-import { chatsCol, messagesCol, mediaCol, attachmentsCol, cronjobsCol, settingsCol } from './index.js';
+import { chatsCol, messagesCol, mediaCol, attachmentsCol, cronjobsCol, settingsCol, waGroupPermissionsCol } from './index.js';
 import { join } from 'path';
 import { unlink } from 'fs/promises';
 
@@ -51,6 +51,12 @@ export async function deleteChat(chatId: string): Promise<void> {
   if (linkedJobs.length > 0) {
     await cronjobsCol.deleteMany({ chatId });
   }
+
+  // Clear chatId on any group permission referencing this chat
+  await waGroupPermissionsCol.updateMany(
+    { chatId },
+    { $set: { chatId: null, updatedAt: new Date() } },
+  );
 
   // If this was the pulse chat, clear the chatId in settings
   if (_clearPulseChatId) {

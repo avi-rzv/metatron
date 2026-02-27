@@ -172,3 +172,21 @@ export interface WhatsAppPermission {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface WhatsAppGroupPermission {
+  id: string;
+  groupJid: string;
+  groupName: string;
+  canRead: boolean;
+  canReply: boolean;
+  chatInstructions: string | null;
+  chatId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppGroup {
+  id: string;
+  name: string;
+  participants: number;
+}

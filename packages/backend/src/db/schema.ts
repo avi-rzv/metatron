@@ -121,6 +121,18 @@ export interface WhatsAppPermission {
   updatedAt: Date;
 }
 
+export interface WhatsAppGroupPermission {
+  _id: string;           // nanoid
+  groupJid: string;      // e.g. "120363012345678@g.us"
+  groupName: string;     // display name from Baileys
+  canRead: boolean;
+  canReply: boolean;
+  chatInstructions: string | null;
+  chatId: string | null; // dedicated chat for group auto-reply
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface CronJob {
   _id: string;           // nanoid
   name: string;          // "Daily Israel News"

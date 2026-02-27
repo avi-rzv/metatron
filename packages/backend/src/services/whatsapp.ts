@@ -373,22 +373,35 @@ class WhatsAppService extends EventEmitter {
     }
   }
 
-  async sendMessage(phone: string, text: string): Promise<{ success: boolean; jid: string }> {
+  async listGroups(): Promise<{ jid: string; name: string; participantCount: number }[]> {
     if (!this.sock || this._status !== 'connected') {
       throw new Error('WhatsApp is not connected');
     }
 
-    const jid = this.phoneToJid(phone);
+    const groups = await this.sock.groupFetchAllParticipating();
+    return Object.values(groups).map(g => ({
+      jid: g.id,
+      name: g.subject,
+      participantCount: g.participants.length,
+    }));
+  }
+
+  async sendMessage(target: string, text: string): Promise<{ success: boolean; jid: string }> {
+    if (!this.sock || this._status !== 'connected') {
+      throw new Error('WhatsApp is not connected');
+    }
+
+    const jid = target.endsWith('@g.us') ? target : this.phoneToJid(target);
     await this.sock.sendMessage(jid, { text });
     return { success: true, jid };
   }
 
-  async sendVoiceMessage(phone: string, audioBuffer: Buffer): Promise<{ success: boolean; jid: string }> {
+  async sendVoiceMessage(target: string, audioBuffer: Buffer): Promise<{ success: boolean; jid: string }> {
     if (!this.sock || this._status !== 'connected') {
       throw new Error('WhatsApp is not connected');
     }
 
-    const jid = this.phoneToJid(phone);
+    const jid = target.endsWith('@g.us') ? target : this.phoneToJid(target);
     await this.sock.sendMessage(jid, {
       audio: audioBuffer,
       ptt: true,
@@ -401,12 +414,17 @@ class WhatsAppService extends EventEmitter {
     let msgs = [...this.messageBuffer];
 
     if (contact) {
-      const normalized = contact.replace(/[^0-9]/g, '');
-      msgs = msgs.filter(m => {
-        const fromNum = m.from.replace(/[^0-9]/g, '');
-        const toNum = m.to.replace(/[^0-9]/g, '');
-        return fromNum.includes(normalized) || toNum.includes(normalized);
-      });
+      if (contact.includes('@g.us')) {
+        // Group JID — match against from/to fields directly
+        msgs = msgs.filter(m => m.from === contact || m.to === contact);
+      } else {
+        const normalized = contact.replace(/[^0-9]/g, '');
+        msgs = msgs.filter(m => {
+          const fromNum = m.from.replace(/[^0-9]/g, '');
+          const toNum = m.to.replace(/[^0-9]/g, '');
+          return fromNum.includes(normalized) || toNum.includes(normalized);
+        });
+      }
     }
 
     return msgs.slice(-limit);

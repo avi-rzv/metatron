@@ -206,6 +206,14 @@ export const enUS = {
     chatInstructions: 'Chat Instructions',
     chatInstructionsPlaceholder: 'e.g. "Only discuss tech topics" or "Respond formally in English"',
     save: 'Save',
+    contactsTab: 'Contacts',
+    groupsTab: 'Groups',
+    addGroup: 'Add Group',
+    selectGroup: 'Select a group to add',
+    noGroupPermissions: 'No group permissions configured. Add a group to allow AI access.',
+    noGroupsAvailable: 'No WhatsApp groups found. Make sure WhatsApp is connected.',
+    removeGroupConfirm: 'Remove permissions for this group?',
+    groupParticipants: 'participants',
   },
 
   schedule: {

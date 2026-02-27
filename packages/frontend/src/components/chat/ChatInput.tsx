@@ -41,8 +41,9 @@ interface ChatInputProps {
   isDraggingOver?: boolean;
 }
 
-const MIN_ROWS = 3;
-const MAX_ROWS = 9;
+const MOBILE_MIN_ROWS = 1;
+const DESKTOP_MIN_ROWS = 3;
+const DESKTOP_MAX_ROWS = 9;
 const LINE_HEIGHT = 24; // px
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -58,6 +59,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const dragCountRef = useRef(0);
   const { isRecording, duration, startRecording, stopRecording, cancelRecording, getElapsedMs } = useVoiceRecorder();
   const pointerTypeRef = useRef<string>('');
+  const isMobileRef = useRef(window.matchMedia('(max-width: 767px)').matches);
 
   // Generate image previews
   useEffect(() => {
@@ -96,12 +98,30 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    const lines = Math.ceil(el.scrollHeight / LINE_HEIGHT);
-    const clamped = Math.min(Math.max(lines, MIN_ROWS), MAX_ROWS);
-    el.style.height = `${clamped * LINE_HEIGHT}px`;
-    el.style.overflowY = lines > MAX_ROWS ? 'auto' : 'hidden';
+    if (isMobileRef.current) {
+      // Mobile: fixed 1-line height, scroll for overflow
+      el.style.height = `${MOBILE_MIN_ROWS * LINE_HEIGHT}px`;
+      el.style.overflowY = 'auto';
+    } else {
+      // Desktop: auto-expand between min/max rows
+      el.style.height = 'auto';
+      const lines = Math.ceil(el.scrollHeight / LINE_HEIGHT);
+      const clamped = Math.min(Math.max(lines, DESKTOP_MIN_ROWS), DESKTOP_MAX_ROWS);
+      el.style.height = `${clamped * LINE_HEIGHT}px`;
+      el.style.overflowY = lines > DESKTOP_MAX_ROWS ? 'auto' : 'hidden';
+    }
   }, []);
+
+  // Re-adjust textarea height when breakpoint changes
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => {
+      isMobileRef.current = e.matches;
+      adjustHeight();
+    };
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [adjustHeight]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -159,7 +179,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     setValue('');
     setFiles([]);
     if (textareaRef.current) {
-      textareaRef.current.style.height = `${MIN_ROWS * LINE_HEIGHT}px`;
+      const minRows = isMobileRef.current ? MOBILE_MIN_ROWS : DESKTOP_MIN_ROWS;
+      textareaRef.current.style.height = `${minRows * LINE_HEIGHT}px`;
     }
   };
 
@@ -330,16 +351,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           </button>
         </div>
       ) : (
-        <div className="flex items-end gap-2 px-3 py-3">
-          {/* Attach button */}
-          <button
-            className="mb-0.5 flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
-            aria-label={t.chat.attach}
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <FontAwesomeIcon icon={faPlus} className="text-base md:text-sm" />
-          </button>
+        <div className="px-3 py-2 md:py-3">
           <input
             ref={fileInputRef}
             type="file"
@@ -352,30 +364,77 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             }}
           />
 
-          {/* Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            placeholder={t.chat.typeMessage}
-            disabled={disabled}
-            rows={MIN_ROWS}
-            style={{ height: `${MIN_ROWS * LINE_HEIGHT}px`, overflowY: 'hidden' }}
-            className="flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none leading-6 disabled:opacity-60"
-          />
+          {/* Input row: attach (desktop) | textarea | mic/send (desktop) */}
+          <div className="flex items-end gap-2">
+            {/* Attach — desktop only, inline left */}
+            <button
+              className="mb-0.5 hidden md:flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
+              aria-label={t.chat.attach}
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <FontAwesomeIcon icon={faPlus} className="text-sm" />
+            </button>
 
-          {/* Send or Mic button */}
-          <div className="mb-0.5">
+            {/* Textarea — single element, responsive height */}
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              placeholder={t.chat.typeMessage}
+              disabled={disabled}
+              rows={1}
+              style={{ height: `${(isMobileRef.current ? MOBILE_MIN_ROWS : DESKTOP_MIN_ROWS) * LINE_HEIGHT}px`, overflowY: 'hidden' }}
+              className="flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none leading-6 disabled:opacity-60"
+            />
+
+            {/* Mic/Send — desktop only, inline right */}
+            <div className="mb-0.5 hidden md:block">
+              {hasSendable ? (
+                <button
+                  onClick={handleSend}
+                  disabled={disabled}
+                  aria-label={t.chat.send}
+                  type="button"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  <FontAwesomeIcon icon={faPaperPlane} className="text-xs" />
+                </button>
+              ) : (
+                <button
+                  onPointerDown={handleMicPointerDown}
+                  onClick={handleMicClick}
+                  disabled={disabled}
+                  aria-label={t.chat.recordVoice}
+                  type="button"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  <FontAwesomeIcon icon={faMicrophone} className="text-sm" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile tools row — attach (left) | mic/send (right) */}
+          <div className="flex md:hidden items-center justify-between mt-1">
+            <button
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150"
+              aria-label={t.chat.attach}
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <FontAwesomeIcon icon={faPlus} className="text-sm" />
+            </button>
             {hasSendable ? (
               <button
                 onClick={handleSend}
-                disabled={disabled || !hasSendable}
+                disabled={disabled}
                 aria-label={t.chat.send}
                 type="button"
-                className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150 disabled:opacity-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 active:scale-90 transition-all duration-150 disabled:opacity-50"
               >
-                <FontAwesomeIcon icon={faPaperPlane} className="text-sm md:text-xs" />
+                <FontAwesomeIcon icon={faPaperPlane} className="text-sm" />
               </button>
             ) : (
               <button
@@ -384,9 +443,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 disabled={disabled}
                 aria-label={t.chat.recordVoice}
                 type="button"
-                className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150 disabled:opacity-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:scale-90 transition-all duration-150 disabled:opacity-50"
               >
-                <FontAwesomeIcon icon={faMicrophone} className="text-base md:text-sm" />
+                <FontAwesomeIcon icon={faMicrophone} className="text-sm" />
               </button>
             )}
           </div>

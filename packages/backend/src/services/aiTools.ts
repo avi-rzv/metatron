@@ -1,4 +1,4 @@
-import { mediaCol, waPermissionsCol } from '../db/index.js';
+import { mediaCol, waPermissionsCol, waGroupPermissionsCol } from '../db/index.js';
 import { updateMemory, updateDbSchema } from './systemInstruction.js';
 import { executeAIOperation, type MongoOperation } from './mongoValidator.js';
 import { braveWebSearch } from './braveSearch.js';
@@ -30,6 +30,8 @@ export interface AIToolCallbacks {
   whatsappSendMessage?: (phone: string, message: string, asVoice?: boolean) => Promise<string>;
   whatsappManagePermission?: (action: string, phoneNumber: string, displayName?: string, canRead?: boolean, canReply?: boolean, chatInstructions?: string) => Promise<string>;
   whatsappListPermissions?: () => Promise<string>;
+  whatsappListGroups?: () => Promise<string>;
+  whatsappManageGroupPermission?: (action: string, groupJid: string, groupName?: string, canRead?: boolean, canReply?: boolean, chatInstructions?: string) => Promise<string>;
   manageCronjob: (action: string, name?: string, instruction?: string, cronExpression?: string, jobId?: string, enabled?: boolean) => Promise<string>;
   managePulse: (action: string, notes?: string, enabled?: boolean, activeDays?: number[], pulsesPerDay?: number, quietHours?: QuietHoursRange[]) => Promise<string>;
 }
@@ -84,27 +86,39 @@ export function createAIToolCallbacks(opts: AIToolOptions = {}): AIToolCallbacks
       ? {
           async whatsappReadMessages(contact: string | undefined, limit: number): Promise<string> {
             try {
-              const allPerms = await waPermissionsCol.find({ canRead: true }).toArray();
-              const permittedPhones = new Set(allPerms.map(p => p.phoneNumber));
+              const isGroup = contact?.includes('@g.us');
 
-              if (contact) {
-                const normalized = contact.replace(/[^0-9]/g, '');
-                if (!permittedPhones.has(normalized)) {
-                  return JSON.stringify({ error: `No read permission for contact ${contact}. Use whatsapp_manage_permission to grant access first.` });
+              if (!isGroup) {
+                const allPerms = await waPermissionsCol.find({ canRead: true }).toArray();
+                const permittedPhones = new Set(allPerms.map(p => p.phoneNumber));
+
+                if (contact) {
+                  const normalized = contact.replace(/[^0-9]/g, '');
+                  if (!permittedPhones.has(normalized)) {
+                    return JSON.stringify({ error: `No read permission for contact ${contact}. Use whatsapp_manage_permission to grant access first.` });
+                  }
                 }
+
+                let messages = whatsapp.getMessages(contact, limit || 20);
+
+                // Filter to only permitted contacts
+                if (!contact) {
+                  messages = messages.filter(m => {
+                    const fromNum = m.from.replace(/[^0-9]/g, '');
+                    const toNum = m.to.replace(/[^0-9]/g, '');
+                    return [...permittedPhones].some(p => fromNum.includes(p) || toNum.includes(p));
+                  });
+                }
+
+                return JSON.stringify({ messages });
               }
 
-              let messages = whatsapp.getMessages(contact, limit || 20);
-
-              // Filter to only permitted contacts
-              if (!contact) {
-                messages = messages.filter(m => {
-                  const fromNum = m.from.replace(/[^0-9]/g, '');
-                  const toNum = m.to.replace(/[^0-9]/g, '');
-                  return [...permittedPhones].some(p => fromNum.includes(p) || toNum.includes(p));
-                });
+              // Group — check group permission
+              const groupPerm = await waGroupPermissionsCol.findOne({ groupJid: contact, canRead: true });
+              if (!groupPerm) {
+                return JSON.stringify({ error: `No read permission for group ${contact}. Use whatsapp_manage_group_permission to grant access first.` });
               }
-
+              const messages = whatsapp.getMessages(contact, limit || 20);
               return JSON.stringify({ messages });
             } catch (err) {
               return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
@@ -112,13 +126,21 @@ export function createAIToolCallbacks(opts: AIToolOptions = {}): AIToolCallbacks
           },
           async whatsappSendMessage(phone: string, message: string, asVoice?: boolean): Promise<string> {
             try {
-              const normalized = phone.replace(/[^0-9]/g, '');
-              // Allow self-messages (to master's own number) without permission check
-              const isSelfMessage = whatsapp.phoneNumber && normalized === whatsapp.phoneNumber.replace(/[^0-9]/g, '');
-              if (!isSelfMessage) {
-                const perm = await waPermissionsCol.findOne({ phoneNumber: normalized });
-                if (!perm?.canReply) {
-                  return JSON.stringify({ error: `No reply permission for ${phone}. Use whatsapp_manage_permission to grant access first.` });
+              const isGroup = phone.includes('@g.us');
+              if (isGroup) {
+                const groupPerm = await waGroupPermissionsCol.findOne({ groupJid: phone, canReply: true });
+                if (!groupPerm) {
+                  return JSON.stringify({ error: `No reply permission for group ${phone}. Use whatsapp_manage_group_permission to grant access first.` });
+                }
+              } else {
+                const normalized = phone.replace(/[^0-9]/g, '');
+                // Allow self-messages (to master's own number) without permission check
+                const isSelfMessage = whatsapp.phoneNumber && normalized === whatsapp.phoneNumber.replace(/[^0-9]/g, '');
+                if (!isSelfMessage) {
+                  const perm = await waPermissionsCol.findOne({ phoneNumber: normalized });
+                  if (!perm?.canReply) {
+                    return JSON.stringify({ error: `No reply permission for ${phone}. Use whatsapp_manage_permission to grant access first.` });
+                  }
                 }
               }
 
@@ -205,6 +227,68 @@ export function createAIToolCallbacks(opts: AIToolOptions = {}): AIToolCallbacks
                   canReply: p.canReply,
                 })),
               });
+            } catch (err) {
+              return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
+            }
+          },
+          async whatsappListGroups(): Promise<string> {
+            try {
+              const groups = await whatsapp.listGroups();
+              return JSON.stringify({ groups });
+            } catch (err) {
+              return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
+            }
+          },
+          async whatsappManageGroupPermission(action: string, groupJid: string, groupName?: string, canRead?: boolean, canReply?: boolean, chatInstructions?: string): Promise<string> {
+            try {
+              switch (action) {
+                case 'set': {
+                  if (!groupJid?.includes('@g.us')) return JSON.stringify({ error: 'Invalid group JID — must contain @g.us' });
+                  const existing = await waGroupPermissionsCol.findOne({ groupJid });
+                  if (existing) {
+                    const updates: Record<string, unknown> = { updatedAt: new Date() };
+                    if (groupName !== undefined) updates.groupName = groupName;
+                    if (canRead !== undefined) updates.canRead = canRead;
+                    if (canReply !== undefined) updates.canReply = canReply;
+                    if (chatInstructions !== undefined) updates.chatInstructions = chatInstructions;
+                    await waGroupPermissionsCol.updateOne({ _id: existing._id }, { $set: updates });
+                    return JSON.stringify({ success: true, action: 'updated', groupJid });
+                  }
+                  const now = new Date();
+                  await waGroupPermissionsCol.insertOne({
+                    _id: nanoid(),
+                    groupJid,
+                    groupName: groupName || groupJid,
+                    canRead: canRead ?? true,
+                    canReply: canReply ?? false,
+                    chatInstructions: chatInstructions ?? null,
+                    chatId: null,
+                    createdAt: now,
+                    updatedAt: now,
+                  });
+                  return JSON.stringify({ success: true, action: 'created', groupJid });
+                }
+                case 'list': {
+                  const perms = await waGroupPermissionsCol.find({}).sort({ groupName: 1 }).toArray();
+                  return JSON.stringify({
+                    permissions: perms.map(p => ({
+                      groupJid: p.groupJid,
+                      groupName: p.groupName,
+                      canRead: p.canRead,
+                      canReply: p.canReply,
+                      chatInstructions: p.chatInstructions,
+                    })),
+                  });
+                }
+                case 'remove': {
+                  if (!groupJid) return JSON.stringify({ error: 'group_jid is required for remove' });
+                  const result = await waGroupPermissionsCol.deleteOne({ groupJid });
+                  if (result.deletedCount === 0) return JSON.stringify({ error: 'Group permission not found' });
+                  return JSON.stringify({ success: true, action: 'removed', groupJid });
+                }
+                default:
+                  return JSON.stringify({ error: `Unknown action: ${action}. Valid actions: set, list, remove` });
+              }
             } catch (err) {
               return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
             }

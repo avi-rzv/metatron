@@ -31,7 +31,7 @@ const PROTECTED_COLLECTIONS = new Set([
 ]);
 
 const AI_MANAGED_COLLECTIONS = new Set([
-  'master', 'contacts', 'schedule', 'whatsapp_permissions', 'cronjobs',
+  'master', 'contacts', 'schedule', 'whatsapp_permissions', 'whatsapp_group_permissions', 'cronjobs',
 ]);
 
 const WRITE_OPERATIONS = new Set([

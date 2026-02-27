@@ -1,5 +1,5 @@
 import { MongoClient, type Collection, type Db } from 'mongodb';
-import type { Chat, Message, Setting, MediaDoc, AttachmentDoc, Master, Contact, ScheduleEvent, WhatsAppPermission, CronJob } from './schema.js';
+import type { Chat, Message, Setting, MediaDoc, AttachmentDoc, Master, Contact, ScheduleEvent, WhatsAppPermission, WhatsAppGroupPermission, CronJob } from './schema.js';
 import { mkdir } from 'fs/promises';
 
 const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017';
@@ -22,6 +22,7 @@ export const masterCol: Collection<Master> = database.collection('master');
 export const contactsCol: Collection<Contact> = database.collection('contacts');
 export const scheduleCol: Collection<ScheduleEvent> = database.collection('schedule');
 export const waPermissionsCol: Collection<WhatsAppPermission> = database.collection('whatsapp_permissions');
+export const waGroupPermissionsCol: Collection<WhatsAppGroupPermission> = database.collection('whatsapp_group_permissions');
 export const cronjobsCol: Collection<CronJob> = database.collection('cronjobs');
 
 // Create indexes
@@ -43,6 +44,8 @@ await Promise.all([
   // whatsapp_permissions indexes
   waPermissionsCol.createIndex({ phoneNumber: 1 }, { unique: true }),
   waPermissionsCol.createIndex({ contactId: 1 }),
+  // whatsapp_group_permissions indexes
+  waGroupPermissionsCol.createIndex({ groupJid: 1 }, { unique: true }),
   // cronjobs indexes
   cronjobsCol.createIndex({ enabled: 1 }),
   cronjobsCol.createIndex({ chatId: 1 }),

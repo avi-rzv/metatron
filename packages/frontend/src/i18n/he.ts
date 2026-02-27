@@ -208,6 +208,14 @@ export const he: Strings = {
     chatInstructions: 'הוראות צ׳אט',
     chatInstructionsPlaceholder: 'לדוגמה: "דבר רק על נושאי טכנולוגיה" או "השב באופן רשמי באנגלית"',
     save: 'שמור',
+    contactsTab: 'אנשי קשר',
+    groupsTab: 'קבוצות',
+    addGroup: 'הוסף קבוצה',
+    selectGroup: 'בחר קבוצה להוספה',
+    noGroupPermissions: 'לא הוגדרו הרשאות קבוצה. הוסף קבוצה כדי לאפשר ל-AI גישה.',
+    noGroupsAvailable: 'לא נמצאו קבוצות ווטסאפ. ודא שווטסאפ מחובר.',
+    removeGroupConfirm: 'להסיר הרשאות עבור קבוצה זו?',
+    groupParticipants: 'משתתפים',
   },
 
   schedule: {

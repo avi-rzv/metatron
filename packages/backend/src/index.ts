@@ -13,6 +13,7 @@ import { uploadRoutes } from './routes/uploads.js';
 import { voiceRoutes } from './routes/voice.js';
 import { whatsappRoutes } from './routes/whatsapp.js';
 import { whatsappPermissionRoutes } from './routes/whatsappPermissions.js';
+import { whatsappGroupPermissionRoutes } from './routes/whatsappGroupPermissions.js';
 import { cronjobRoutes } from './routes/cronjobs.js';
 import { initWhatsAppAutoReply } from './services/whatsappAutoReply.js';
 import { initCronService } from './services/cronService.js';
@@ -49,6 +50,7 @@ await fastify.register(uploadRoutes);
 await fastify.register(voiceRoutes);
 await fastify.register(whatsappRoutes);
 await fastify.register(whatsappPermissionRoutes);
+await fastify.register(whatsappGroupPermissionRoutes);
 await fastify.register(cronjobRoutes);
 
 // Initialize WhatsApp auto-reply service

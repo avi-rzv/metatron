@@ -1,4 +1,4 @@
-import { settingsCol, waPermissionsCol, masterCol, contactsCol } from '../db/index.js';
+import { settingsCol, waPermissionsCol, waGroupPermissionsCol, masterCol, contactsCol, chatsCol } from '../db/index.js';
 import { getSettings, type AppSettings } from './settings.js';
 import { getPulseInfo } from './pulseService.js';
 import { whatsapp } from './whatsapp.js';
@@ -267,6 +267,8 @@ export async function buildCombinedPrompt(): Promise<string | null> {
     toolLines.push('- **whatsapp_send_message**: Send a WhatsApp message to a phone number. Requires reply permission for the contact. IMPORTANT: Always confirm with the user before sending. Set `as_voice: true` to send as a voice note instead of text.');
     toolLines.push('- **whatsapp_manage_permission**: Manage WhatsApp contact permissions. Grant, update, revoke, or remove read/reply access for a phone number. Actions: "grant", "update", "revoke", "remove".');
     toolLines.push('- **whatsapp_list_permissions**: List all WhatsApp contact permissions showing who the AI can read from and reply to.');
+    toolLines.push('- **whatsapp_list_groups**: List all WhatsApp groups you are a member of. Returns group names, JIDs, and participant counts.');
+    toolLines.push('- **whatsapp_manage_group_permission**: Manage WhatsApp group permissions. Set read/reply access and chat instructions for groups. Actions: "set", "list", "remove". Use whatsapp_list_groups first to get group JIDs.');
   }
 
   const toolsSection = toolLines.length > 0
@@ -282,7 +284,15 @@ export async function buildCombinedPrompt(): Promise<string | null> {
         `- ${p.displayName} (${p.phoneNumber}): read=${p.canRead}, reply=${p.canReply}`
       );
       const permList = permLines.length > 0 ? permLines.join('\n') : 'No permissions configured yet.';
-      whatsappSection = `\n\n## WhatsApp Permissions\nWhatsApp is connected. Messages can only be read from and replied to contacts with explicit permission.\nWhen the user asks you to grant WhatsApp access, use \`whatsapp_manage_permission\` with the appropriate action.\nContacts with canReply=true will receive automatic replies when they message. Extract useful info from WhatsApp conversations to enrich contacts and schedule collections.\n\nCurrent permissions:\n${permList}`;
+
+      // Group permissions
+      const groupPerms = await waGroupPermissionsCol.find({}).sort({ groupName: 1 }).toArray();
+      const groupPermLines = groupPerms.map(p =>
+        `- ${p.groupName} (${p.groupJid}): read=${p.canRead}, reply=${p.canReply}`
+      );
+      const groupPermList = groupPermLines.length > 0 ? groupPermLines.join('\n') : 'No group permissions configured yet.';
+
+      whatsappSection = `\n\n## WhatsApp Permissions\nWhatsApp is connected. Messages can only be read from and replied to contacts/groups with explicit permission.\nWhen the user asks you to grant WhatsApp access, use \`whatsapp_manage_permission\` for contacts or \`whatsapp_manage_group_permission\` for groups.\nContacts/groups with canReply=true will receive automatic replies when they message. Extract useful info from WhatsApp conversations to enrich contacts and schedule collections.\n\nCurrent contact permissions:\n${permList}\n\nCurrent group permissions:\n${groupPermList}`;
     } catch {
       whatsappSection = '';
     }
@@ -484,6 +494,126 @@ Always reply in the same language the contact writes in.
 - When you receive a voice message, you may reply with a voice note (as_voice=true) or text.
 - For casual conversations, prefer voice replies to match the contact's communication style.
 - Keep voice replies short and conversational — avoid long monologues.
+
+---
+## Current Date & Time
+${dateTimeStr} (${timezone})
+
+## Your Memory
+${memorySection}
+
+## Your Database
+${schemaSection}
+
+## Available Tools
+${toolsSection}${notificationsSection}${instructionsSection}`;
+}
+
+/**
+ * Build a purpose-built system instruction for WhatsApp group auto-reply.
+ * Similar to buildWhatsAppPrompt() but tailored for group conversations.
+ */
+export async function buildWhatsAppGroupPrompt(opts: {
+  groupJid: string;
+  groupName: string;
+  senderName: string;
+}): Promise<string | null> {
+  const [si, appSettings, masterDoc, groupPerm] = await Promise.all([
+    getSystemInstruction(),
+    getSettings(),
+    masterCol.findOne({}),
+    waGroupPermissionsCol.findOne({ groupJid: opts.groupJid }),
+  ]);
+
+  if (!si.coreInstruction.trim()) return null;
+
+  // Master name
+  const masterParts = [masterDoc?.firstName, masterDoc?.lastName].filter(Boolean);
+  const masterName = masterParts.length > 0 ? masterParts.join(' ') : 'your master';
+
+  // Date/time
+  const timezone = appSettings.timezone || 'UTC';
+  const dateTimeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'long',
+  }).format(new Date());
+
+  // Memory
+  const memorySection = si.memory.trim()
+    ? si.memory
+    : 'No memories stored yet.';
+
+  // DB schema
+  const schemaSection = si.dbSchema.trim()
+    ? si.dbSchema
+    : 'No custom collections documented yet.';
+
+  // Tool list
+  const braveEnabled = !!appSettings.tools?.braveSearch?.enabled && !!appSettings.tools.braveSearch.apiKey;
+  const imageModelConfigured = !!appSettings.primaryImageModel;
+  const masterPhone = whatsapp.phoneNumber?.replace(/[^0-9]/g, '') ?? null;
+
+  const waToolLines: string[] = [
+    '- **save_memory**: Save important information to your persistent memory.',
+    '- **db_query**: Query and modify MongoDB collections.',
+    '- **update_db_schema**: Update the database schema documentation.',
+    '- **manage_cronjob**: Create, list, update, delete, or toggle recurring scheduled tasks.',
+    '- **whatsapp_send_message**: Send a WhatsApp message. You can message the master directly for urgent notifications. Set `as_voice: true` to send as a voice note.',
+  ];
+  if (braveEnabled) {
+    waToolLines.push('- **web_search**: Search the web for current information.');
+  }
+  if (imageModelConfigured) {
+    waToolLines.push('- **generate_image**: Generate an image from a text description.');
+    waToolLines.push('- **edit_image**: Edit a previously generated image by its ID.');
+  }
+
+  const toolsSection = waToolLines.join('\n');
+
+  // Notifications section
+  const notificationsSection = masterPhone
+    ? `\n\n## Notifications
+You can send WhatsApp messages to ${masterName} (phone: ${masterPhone}) to notify them about important matters.
+Send a notification when something urgent comes up that needs ${masterName}'s attention.
+Keep notifications concise. Do NOT notify for routine small-talk.`
+    : '';
+
+  // Per-group chat instructions
+  const chatInstructions = groupPerm?.chatInstructions;
+  const instructionsSection = chatInstructions
+    ? `\n\n## Group-Specific Instructions\nThe master has set the following instructions for this group:\n${chatInstructions}`
+    : '';
+
+  return `# Identity
+You are the personal assistant of ${masterName}. Your name is Metatron.
+
+# Context
+You are in a WhatsApp group called "${opts.groupName}".
+The latest message was sent by ${opts.senderName}.
+You are reading and replying to messages on behalf of ${masterName}.
+
+# Authority
+You have permission to chat and reply in this group on behalf of ${masterName}.
+
+# Privacy & Safety
+- NEVER reveal sensitive personal information about ${masterName} to any group member.
+- NEVER share information about other contacts stored in the database.
+- If a request seems sensitive, tell the group you need to check with ${masterName}.
+
+# Language
+Always reply in the same language the group writes in.
+
+# Behavior
+- Be concise and natural — this is a WhatsApp group, not email.
+- Only respond when it makes sense (you don't need to reply to every message).
+- Proactively extract useful info (names, dates, plans) and update contacts/schedule via db_query.
 
 ---
 ## Current Date & Time

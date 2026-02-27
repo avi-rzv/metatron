@@ -185,13 +185,13 @@ export async function streamOpenAIChat(opts: OpenAIStreamOptions): Promise<void>
           type: 'function',
           function: {
             name: 'whatsapp_read_messages',
-            description: 'Read recent WhatsApp messages. Optionally filter by contact phone number.',
+            description: 'Read recent WhatsApp messages. For individual contacts, only returns messages from contacts with read permission. For groups, use the group JID (from whatsapp_list_groups). Optionally filter by contact phone number or group JID.',
             parameters: {
               type: 'object',
               properties: {
                 contact: {
                   type: 'string',
-                  description: 'Phone number to filter messages by (optional). If omitted, returns all recent messages.',
+                  description: 'Phone number or group JID to filter messages by (optional). Use a group JID like "120363012345678@g.us" for group chats. If omitted, returns all recent messages from permitted contacts.',
                 },
                 limit: {
                   type: 'number',
@@ -212,13 +212,13 @@ export async function streamOpenAIChat(opts: OpenAIStreamOptions): Promise<void>
           type: 'function',
           function: {
             name: 'whatsapp_send_message',
-            description: 'Send a WhatsApp message to a phone number. Requires reply permission for the contact. Always confirm with the user before sending. Supports voice notes via as_voice flag.',
+            description: 'Send a WhatsApp message to a phone number or group. Requires reply permission for individual contacts (not needed for groups). Always confirm with the user before sending. Supports voice notes via as_voice flag.',
             parameters: {
               type: 'object',
               properties: {
                 phone: {
                   type: 'string',
-                  description: 'The recipient phone number in international format (e.g. "14155551234").',
+                  description: 'The recipient phone number in international format (e.g. "14155551234") or a group JID (e.g. "120363012345678@g.us") from whatsapp_list_groups.',
                 },
                 message: {
                   type: 'string',
@@ -296,6 +296,68 @@ export async function streamOpenAIChat(opts: OpenAIStreamOptions): Promise<void>
             parse: JSON.parse,
             function: async () => {
               return opts.toolCallbacks!.whatsappListPermissions!();
+            },
+          },
+        });
+      }
+
+      if (opts.toolCallbacks.whatsappListGroups) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'whatsapp_list_groups',
+            description: 'List all WhatsApp groups you are a member of. Returns group names, JIDs, and participant counts. Use the JID with whatsapp_read_messages or whatsapp_send_message to interact with a group.',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
+            parse: JSON.parse,
+            function: async () => {
+              return opts.toolCallbacks!.whatsappListGroups!();
+            },
+          },
+        });
+      }
+
+      if (opts.toolCallbacks.whatsappManageGroupPermission) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'whatsapp_manage_group_permission',
+            description: 'Manage WhatsApp group permissions. Set read/reply access and chat instructions for groups. Use whatsapp_list_groups first to get group JIDs. Actions: "set" (create or update), "list" (show all), "remove" (delete).',
+            parameters: {
+              type: 'object',
+              properties: {
+                action: {
+                  type: 'string',
+                  description: 'The action: "set" (create/update permission), "list" (show all group permissions), "remove" (delete permission).',
+                },
+                group_jid: {
+                  type: 'string',
+                  description: 'The group JID (e.g. "120363012345678@g.us"). Required for set and remove.',
+                },
+                group_name: {
+                  type: 'string',
+                  description: 'Display name for the group. Required when creating a new permission.',
+                },
+                can_read: {
+                  type: 'boolean',
+                  description: 'Whether the AI can read messages from this group. Defaults to true when setting.',
+                },
+                can_reply: {
+                  type: 'boolean',
+                  description: 'Whether the AI can automatically reply in this group. Defaults to false when setting.',
+                },
+                chat_instructions: {
+                  type: 'string',
+                  description: 'Custom instructions for AI behavior in this group (e.g. "only respond when mentioned"). Stored on the permission and injected into auto-reply prompts.',
+                },
+              },
+              required: ['action'],
+            },
+            parse: JSON.parse,
+            function: async (args: { action: string; group_jid?: string; group_name?: string; can_read?: boolean; can_reply?: boolean; chat_instructions?: string }) => {
+              return opts.toolCallbacks!.whatsappManageGroupPermission!(args.action, args.group_jid ?? '', args.group_name, args.can_read, args.can_reply, args.chat_instructions);
             },
           },
         });

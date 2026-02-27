@@ -1,4 +1,4 @@
-import type { Chat, AppSettings, Message, SystemInstruction, Citation, Media, Attachment, WhatsAppPermission, CronJob } from '../types';
+import type { Chat, AppSettings, Message, SystemInstruction, Citation, Media, Attachment, WhatsAppPermission, WhatsAppGroupPermission, WhatsAppGroup, CronJob } from '../types';
 
 const BASE = '/api';
 
@@ -83,6 +83,16 @@ export const api = {
         request<WhatsAppPermission>(`/whatsapp/permissions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
       delete: (id: string) =>
         fetch(`${BASE}/whatsapp/permissions/${id}`, { method: 'DELETE' }),
+    },
+    groups: () => request<{ groups: WhatsAppGroup[] }>('/whatsapp/groups'),
+    groupPermissions: {
+      list: () => request<WhatsAppGroupPermission[]>('/whatsapp/group-permissions'),
+      create: (data: { groupJid: string; groupName: string; canRead?: boolean; canReply?: boolean }) =>
+        request<WhatsAppGroupPermission>('/whatsapp/group-permissions', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id: string, data: { groupName?: string; canRead?: boolean; canReply?: boolean; chatInstructions?: string | null }) =>
+        request<WhatsAppGroupPermission>(`/whatsapp/group-permissions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      delete: (id: string) =>
+        fetch(`${BASE}/whatsapp/group-permissions/${id}`, { method: 'DELETE' }),
     },
   },
 

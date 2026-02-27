@@ -83,6 +83,20 @@ export async function whatsappRoutes(fastify: FastifyInstance) {
     return { status: 'disconnected' };
   });
 
+  // GET /api/whatsapp/groups — list all WhatsApp groups
+  fastify.get('/api/whatsapp/groups', async (_req, reply) => {
+    if (whatsapp.status !== 'connected') {
+      reply.status(400).send({ error: 'WhatsApp is not connected' });
+      return;
+    }
+    try {
+      const groups = await whatsapp.listGroups();
+      return { groups };
+    } catch (err) {
+      reply.status(500).send({ error: err instanceof Error ? err.message : 'Failed to list groups' });
+    }
+  });
+
   // GET /api/whatsapp/messages
   fastify.get<{ Querystring: { contact?: string; limit?: string } }>('/api/whatsapp/messages', async (req) => {
     const limit = Math.min(Number(req.query.limit) || 50, 100);
